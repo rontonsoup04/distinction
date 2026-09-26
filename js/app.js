@@ -26,7 +26,11 @@
     return (S.courses[uni] = data || []);
   }
   const courseOpts = list => list.map(c => ({ value: c.code, label: c.code, sub: c.title }));
-  const uniOpts = () => S.unis.map(u => ({ value: u.id, label: u.name, sub: u.state }));
+  const uniOpts = () => S.unis.map(u => ({ value: u.id, label: u.name, short: u.short_name, sub: u.state }));
+  const PRICE = { 2: 3, 3: 4.5, 5: 7.5 }, URGENT_FEE = 0.75;
+  const priceFor = (n, urgent) => PRICE[n] + (urgent ? URGENT_FEE * n : 0);
+  async function refreshCredits() { if (!S.user) return; const { data } = await sb.from("profiles").select("credits").eq("id", S.user.id).single(); if (data && S.profile) { S.profile.credits = Number(data.credits); renderHeader(); } }
+  async function settle() { const { data } = await sb.rpc("settle_my_questions"); if (Number(data) > 0) { toast(`${money(Number(data))} refunded to your credits for unanswered spots`); await refreshCredits(); } }
   const uniName = id => (S.uniMap[id] && S.uniMap[id].name) || id || "";
   const uniShort = id => (S.uniMap[id] && S.uniMap[id].short_name) || id || "";
   async function ensureCourse(uni, code) {
@@ -48,12 +52,12 @@
     const p = S.profile, signedIn = !!S.user;
     const route = location.hash.split("/")[1] || "";
     const links = signedIn && p && p.onboarded ? [
-      ["ask", "Ask a question"], ["questions", "My questions"], ["tutor", "Tutor"],
+      ["ask", "Ask a question"], ["questions", "My questions"], ["tutor", "Tutor"], ["credits", "Credits"],
       ...(p.is_admin ? [["admin", "Admin"]] : [])
     ] : [];
     $("#nav").innerHTML = links.map(([r, l]) => `<a href="#/${r}" class="navlink" ${route === r || (r === "tutor" && route === "answer") ? 'aria-current="page"' : ""}>${l}</a>`).join("");
     $("#auth-area").innerHTML = signedIn
-      ? `<button class="avatar-btn" id="me-btn" aria-haspopup="menu"><span class="avatar" aria-hidden="true">${esc(initials(p && p.full_name || S.user.email))}</span><span>${esc(p ? displayName(p) : "Account")}</span></button>`
+      ? `${p && p.onboarded ? `<a class="credit-pill" href="#/credits" title="Your credits">Credits <b>${money(Number(p.credits || 0))}</b></a>` : ""}<button class="avatar-btn" id="me-btn" aria-haspopup="menu"><span class="avatar" aria-hidden="true">${esc(initials(p && p.full_name || S.user.email))}</span><span>${esc(p ? displayName(p) : "Account")}</span></button>`
       : `<a class="btn ghost sm" href="#/login">Log in</a><a class="btn primary sm" href="#/signup">Sign up</a>`;
     const btn = $("#me-btn");
     if (btn) btn.onclick = e => { e.stopPropagation(); const m = $("#menu"); m.hidden = !m.hidden; };
@@ -99,6 +103,7 @@
         case "tutor": return parts[1] === "apply" ? pageTutorApply() : pageTutor();
         case "answer": return pageAnswer(parts[1]);
         case "admin": return pageAdmin();
+        case "credits": return pageCredits();
         default: app().innerHTML = `<div class="empty">Page not found. <a href="#/">Go home</a></div>`;
       }
     } catch (e) { console.error(e); app().innerHTML = `<div class="status err">${esc(errMsg(e))}</div>`; }
@@ -124,8 +129,8 @@
         </div>
       </div>
       <div class="two-up">
-        <div class="panel feature"><span class="eyebrow">For students</span><h2>Answers from people who aced your course</h2><ul><li>Pick your uni and course from 40 Australian universities</li><li>50-word questions with one PDF or image</li><li>Choose HD only or Distinction and up. Every tutor is verified through My eQuals.</li><li>Get 2, 3 or 5 answers. Rate each one.</li></ul><a class="btn primary" href="#/signup/student" style="align-self:flex-start">Sign up as a student</a></div>
-        <div class="panel feature"><span class="eyebrow">For tutors</span><h2>Earn up to $34 an hour from your phone</h2><ul><li>Upload your transcript and share it from My eQuals. We approve your D and HD courses.</li><li>Claim a question, then answer with text and by drawing on the student's document</li><li>$1.10 per answer, $1.70 for urgent questions answered within 20 minutes</li></ul><a class="btn" href="#/signup/tutor" style="align-self:flex-start">Apply to tutor</a></div>
+        <div class="panel feature"><span class="eyebrow">For students</span><h2>Answers from people who aced your course</h2><ul><li>Pick your uni and course from 40 Australian universities</li><li>50-word questions with one PDF or image</li><li>Every tutor with a D or HD in your course, or a similar one, can see and claim it</li><li>Get 2, 3 or 5 answers. Rate each one.</li></ul><a class="btn primary" href="#/signup/student" style="align-self:flex-start">Sign up as a student</a></div>
+        <div class="panel feature"><span class="eyebrow">For tutors</span><h2>Earn up to $34 an hour from your phone</h2><ul><li>Upload your transcript. We read it and approve your D and HD courses. Add My eQuals for a verified checkmark.</li><li>Claim a question, then answer with text and by drawing on the student's document</li><li>$1.10 per answer, $1.70 for urgent questions answered within 20 minutes</li></ul><a class="btn" href="#/signup/tutor" style="align-self:flex-start">Apply to tutor</a></div>
       </div>
     </section>`;
   }
@@ -309,10 +314,10 @@
           <p class="tagline">Let's succeed as a generation.</p>
           <h1>Ask about any course. Students with an <em>HD</em> answer.</h1>
           <p class="fast"><span class="pulse" aria-hidden="true"></span>Receive an answer in a couple of minutes</p>
-          <p>Your question goes to students who got a High Distinction (or a Distinction, if you choose) in that course, and in similar courses at other unis. Standard questions are usually answered within an hour. Tick Urgent for answers within 20 minutes.</p>
+          <p>Your question goes to every student who got a Distinction or High Distinction in that course, or a similar course at your uni or another. Standard questions are usually answered within an hour. Tick Urgent for answers within 20 minutes.</p>
           <div class="how" style="margin-top:22px">
-            <div><span class="stepno">1 · PICK</span><b>Uni and course</b><p>It reaches people who aced that course, plus similar courses elsewhere if you want faster answers.</p></div>
-            <div><span class="stepno">2 · CHOOSE</span><b>Who answers</b><p>Distinction and up, or HD only. Every tutor is verified through My eQuals.</p></div>
+            <div><span class="stepno">1 · PICK</span><b>Uni and course</b><p>Choose your uni and course, write up to 50 words and attach one file.</p></div>
+            <div><span class="stepno">2 · SHARE</span><b>Who answers</b><p>Everyone who got a D or HD in that course, or a similar course at any uni, can see and claim it.</p></div>
             <div><span class="stepno">3 · GET</span><b>Answers</b><p>Tutors reply in short messages and can mark up your PDF or image directly.</p></div>
           </div>
           <a class="recruit" href="#/tutor"><span><b>Got an HD?</b> Earn up to $34 an hour answering quick questions in the courses you aced.</span><span class="recruit-go">Start earning →</span></a>
@@ -322,24 +327,21 @@
             <div class="field"><span id="a-uni-lbl">University</span><div id="a-uni" data-label="a-uni-lbl"></div></div>
             <div class="field"><span id="a-course-lbl">Course</span><div class="pop-right" id="a-course" data-label="a-course-lbl"></div></div>
           </div>
-          <label class="check"><input type="checkbox" id="a-wide" checked> Also send to similar courses at other unis</label>
+          <p class="speed-note">Every approved tutor who got a Distinction or HD in this course, or a similar course at any uni, can see and claim your question.</p>
           <div class="field">
             <div class="row" style="justify-content:space-between"><label for="a-text" style="font-size:13px;font-weight:500">Your question</label><span class="words" id="a-words">0 / ${WORD_LIMIT} words</span></div>
             <textarea class="prose" id="a-text" style="min-height:76px" placeholder="Keep it short: what you're stuck on and which week or assignment it's from."></textarea>
             <div class="attach"><label class="linkbtn attach-btn" for="a-file" id="a-file-btn">+ Attach a file</label><input type="file" id="a-file" accept="${FILE_TYPES.join(",")}" hidden><span id="a-file-chip"></span><small class="muted">1 image or PDF, up to 5 MB</small></div>
           </div>
-          <div class="field"><span>Who can answer</span>
-            <div class="seg" role="radiogroup" aria-label="Minimum grade"><label><input type="radio" name="a-grade" value="75" checked><span>Distinction and HD</span></label><label><input type="radio" name="a-grade" value="85"><span>HD only</span></label></div>
-            <p class="speed-note">Every tutor is verified through My eQuals.</p>
-          </div>
           <div class="field"><span>How many answers</span>
             <div class="boxes" role="radiogroup" aria-label="Number of answers">
-              ${[2, 3, 5].map((n, i) => `<label><input type="radio" name="a-count" value="${n}" ${i === 0 ? "checked" : ""}><span class="box"><b>${n}</b><small>answers</small></span></label>`).join("")}
+              ${[2, 3, 5].map((n, i) => `<label><input type="radio" name="a-count" value="${n}" ${i === 0 ? "checked" : ""}><span class="box"><b>${n}</b><small>answers</small><em>${money(PRICE[n])}</em></span></label>`).join("")}
             </div>
             <p class="speed-note">Standard questions are usually answered within an hour.</p>
-            <label class="check urgent-check"><input type="checkbox" id="a-urgent"><span><b>Urgent</b>: answers within 20 minutes</span></label>
+            <label class="check urgent-check"><input type="checkbox" id="a-urgent"><span><b>Urgent</b>: answers within 20 minutes <em class="plus-cr" id="a-urgent-fee">+${money(URGENT_FEE * 2)}</em></span></label>
           </div>
-          <div class="post-row"><div class="field dur"><span id="a-dur-lbl">Open for</span><div id="a-dur" data-label="a-dur-lbl"></div></div><button class="btn primary" id="a-post">Post question</button></div>
+          <div class="post-row"><div class="field dur"><span id="a-dur-lbl">Open for</span><div id="a-dur" data-label="a-dur-lbl"></div></div><div class="total" id="a-cost"></div><button class="btn primary" id="a-post">Post question</button></div>
+          <div class="price-row muted"><span>Your balance: <b class="mono" style="color:var(--ink)">${money(Number(p.credits || 0))}</b></span><span>Unanswered spots are refunded when the question closes.</span></div>
           <div id="a-status" hidden></div>
         </form>
       </div>
@@ -354,7 +356,15 @@
       list.sort((a, b) => (mine.includes(b.value) - mine.includes(a.value)) || a.value.localeCompare(b.value));
       courseSel.setOptions(list, mine[0] || null);
     }
-    const uniSel2 = glassSelect($("#a-uni"), { options: uniOpts(), value: p.uni_id, search: "Search universities", onChange: loadCourses });
+    const uniSel2 = glassSelect($("#a-uni"), { options: uniOpts(), value: p.uni_id, search: "Search universities", hideSub: true, onChange: loadCourses });
+    function paintCost() {
+      const n = +document.querySelector('input[name="a-count"]:checked').value, urgent = $("#a-urgent").checked;
+      document.querySelectorAll('input[name="a-count"]').forEach(r => r.parentElement.querySelector("em").textContent = money(priceFor(+r.value, urgent)));
+      $("#a-urgent-fee").textContent = "+" + money(URGENT_FEE * n);
+      $("#a-cost").innerHTML = `<small>${n} answers${urgent ? " + urgent" : ""}</small><b class="mono">${money(priceFor(n, urgent))}</b>`;
+    }
+    document.querySelectorAll('input[name="a-count"], #a-urgent').forEach(el => el.addEventListener("change", paintCost));
+    paintCost();
     await loadCourses(p.uni_id);
     const durSel = glassSelect($("#a-dur"), { options: DURS, value: "24" });
 
@@ -380,6 +390,8 @@
       if (!validCode(code)) return status(st, "Pick a course from the list, or type its code in the search box.", "err");
       if (w < 5) return status(st, "Write a bit more so tutors know what you're stuck on.", "err");
       if (w > WORD_LIMIT) return status(st, `Your question is ${w} words. Cut it to ${WORD_LIMIT} or fewer.`, "err");
+      const cost = priceFor(+document.querySelector('input[name="a-count"]:checked').value, $("#a-urgent").checked);
+      if (cost > Number(p.credits || 0)) return status(st, `This question costs ${money(cost)} and you have ${money(Number(p.credits || 0))}. Choose fewer answers or untick Urgent. Buying credits is coming soon.`, "err");
       const btn = $("#a-post"); btn.disabled = true; status(st, attach ? "Uploading your file…" : "Posting…", "", true);
       try {
         let att = {};
@@ -393,18 +405,19 @@
         const hours = +durSel.value;
         const row = {
           asker_id: S.user.id, uni_id: uni, course_code: code, body: text, ...att,
-          min_mark: +document.querySelector('input[name="a-grade"]:checked').value,
-          verified_only: false, wide: $("#a-wide").checked, urgent: $("#a-urgent").checked,
+          min_mark: 75, verified_only: false, wide: true, urgent: $("#a-urgent").checked,
           slots: +document.querySelector('input[name="a-count"]:checked').value,
           expires_at: new Date(Date.now() + hours * 3600e3).toISOString()
         };
         const { data, error } = await sb.from("questions").insert(row).select("id").single();
         if (error) throw error;
-        toast("Question posted. We'll show answers here as they arrive.");
+        await refreshCredits();
+        toast(`Question posted. ${money(cost)} used from your credits.`);
         location.hash = "#/q/" + data.id;
       } catch (err) { status(st, errMsg(err), "err"); btn.disabled = false; }
     };
     renderRecent($("#recent"), 4);
+    settle();
   }
 
   async function myQuestions(limit) {
@@ -418,15 +431,19 @@
       <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniShort(q.uni_id))} · ${ago(q.created_at)}</span></span><span class="q-exp${closed ? "" : " live"}">${left(q.expires_at)}</span></div>
       <p class="q-text">${esc(q.body)}</p>
       <div class="q-pay"><span class="slotbar">${Array.from({ length: q.slots }, (_, i) => `<i class="${i < n ? "on" : ""}"></i>`).join("")}</span><span>${n} of ${q.slots} answers</span>${q.urgent ? '<span class="tagchip">Urgent</span>' : ""}${q.attachment_name ? '<span class="tagchip">Attachment</span>' : ""}</div>
+      ${S.drafting && S.drafting[q.id] ? `<div class="drafting"><span class="spin"></span><span>${esc(S.drafting[q.id].join(", "))} ${S.drafting[q.id].length > 1 ? "are" : "is"} drafting up the answer<span class="dots"></span></span></div>` : ""}
     </article></a>`;
   }
   async function renderRecent(el, limit) {
-    const qs = await myQuestions(limit);
+    const [qs, dr] = await Promise.all([myQuestions(limit), sb.rpc("my_drafting")]);
+    S.drafting = {}; ((dr && dr.data) || []).forEach(d => { (S.drafting[d.question_id] = S.drafting[d.question_id] || []).push(d.tutor_name); });
     el.innerHTML = qs.length ? qs.map(qSummary).join("") : `<div class="empty">You haven't asked anything yet.</div>`;
   }
   async function pageMyQuestions() {
     app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">My questions</h1><a class="btn primary" href="#/ask">Ask a question</a></div><div class="qgrid" id="list"><div class="boot">Loading…</div></div></section>`;
     await renderRecent($("#list"));
+    settle();
+    every(15000, () => renderRecent($("#list")));
   }
 
   /* ---------------- question detail (student) ---------------- */
@@ -451,7 +468,7 @@
           </article>
           ${q.attachment_path ? `<div class="answer-tabs" id="ann-tabs"></div><div id="doc"></div>` : ""}
         </div>
-        <aside class="answer-side"><div class="results-head"><h2>Answers</h2><span class="muted" id="count"></span></div><div class="col" id="answers"></div></aside>
+        <aside class="answer-side"><div class="results-head"><h2>Answers</h2><span class="muted" id="count"></span></div><div id="drafting"></div><div class="col" id="answers"></div></aside>
       </div></section>`;
     let doc = null;
     if (q.attachment_path) {
@@ -459,7 +476,14 @@
       catch (e) { $("#doc").innerHTML = `<div class="status err">${esc(errMsg(e))}</div>`; }
     }
     let shownAnswer = null, lastIds = "";
+    async function loadDrafting() {
+      if (!mine) return;
+      const { data } = await sb.rpc("my_drafting");
+      const names = (data || []).filter(d => d.question_id === id).map(d => d.tutor_name);
+      $("#drafting").innerHTML = names.length ? `<div class="drafting"><span class="spin"></span><span><b>${esc(names.join(", "))}</b> ${names.length > 1 ? "are" : "is"} drafting up the answer<span class="dots"></span></span></div>` : "";
+    }
     async function load() {
+      loadDrafting();
       const { data: ans } = await sb.from("answers").select("*").eq("question_id", id).order("position");
       const answers = ans || [];
       $("#count").textContent = `${answers.length} of ${q.slots}`;
@@ -521,7 +545,31 @@
       }
     });
     await load();
-    every(15000, () => { const el = $("[data-exp]"); if (el) el.textContent = left(el.dataset.exp); if (new Date(q.expires_at) > new Date()) load(); });
+    every(10000, () => { const el = $("[data-exp]"); if (el) el.textContent = left(el.dataset.exp); if (new Date(q.expires_at) > new Date()) load(); });
+    if (mine) settle();
+  }
+
+  /* ---------------- credits ---------------- */
+  async function pageCredits() {
+    await settle(); await refreshCredits();
+    const { data: tx } = await sb.from("credit_tx").select("*").eq("user_id", S.user.id).order("created_at", { ascending: false }).limit(30);
+    const bal = Number(S.profile.credits || 0);
+    app().innerHTML = `<section class="view"><div class="wallet-grid">
+      <div class="panel">
+        <div class="eyebrow">Your balance</div>
+        <div><span class="balance">${money(bal)}</span> <span class="muted">in credits</span></div>
+        <p class="muted" style="font-size:14px">1 credit = $1. You started with $10 of free credits. Unanswered spots are refunded when a question closes, and so is the urgent fee for any answer that takes over 20 minutes.</p>
+        <div class="eyebrow" style="margin-top:6px">What questions cost</div>
+        <div class="table-wrap"><table style="min-width:0"><thead><tr><th>Answers</th><th>Standard</th><th>Urgent</th></tr></thead><tbody>
+          ${[2, 3, 5].map(n => `<tr><td>${n} answers</td><td class="num">${money(priceFor(n, false))}</td><td class="num">${money(priceFor(n, true))}</td></tr>`).join("")}
+        </tbody></table></div>
+        <div class="eyebrow" style="margin-top:6px">Buy credits</div>
+        <div class="packs">${[[10, "$10", ""], [21, "$20", "+1 bonus credit"], [55, "$50", "+5 bonus credits"]].map(([c, pr, note]) => `<div class="pack" aria-disabled="true" style="cursor:default;opacity:.7"><b>${c}</b><span>credits · ${pr}</span><small>${note || "Starter"}</small></div>`).join("")}</div>
+        <div class="status">Buying credits is coming soon.</div>
+      </div>
+      <div class="panel"><div class="eyebrow">History</div>
+        <ul class="list">${(tx || []).map(t => `<li><span>${esc(t.label)} <span class="muted" style="font-size:12px">${ago(t.created_at)}</span></span><span class="amt ${t.amount > 0 ? "pos" : ""}">${t.amount > 0 ? "+" : ""}${money(Number(t.amount))}</span></li>`).join("") || '<li class="muted">No activity yet.</li>'}</ul>
+      </div></div></section>`;
   }
 
   /* ---------------- tutor ---------------- */
@@ -537,7 +585,7 @@
       <h1>Turn your best marks into up to $34 an hour.</h1>
       <p>Upload your transcript and we'll check it. Every course where you got a Distinction (75+) or High Distinction becomes a course you can tutor. Then answer short questions from students for $1.10 each, or $1.70 for urgent questions answered within 20 minutes. Most take about 3 minutes.</p>
       <div class="cta-row"><a class="btn primary" href="#/tutor/apply">Apply to tutor</a></div></div>
-      <div class="how"><div><span class="stepno">STEP 1</span><b>Profile</b><p>Your uni, degree and a short intro.</p></div><div><span class="stepno">STEP 2</span><b>Transcript</b><p>Upload it and share it from My eQuals. We read your marks automatically.</p></div><div><span class="stepno">STEP 3</span><b>Review</b><p>We confirm your transcript, usually within 48 hours.</p></div></div>
+      <div class="how"><div><span class="stepno">STEP 1</span><b>Profile</b><p>Your uni, degree and a short intro.</p></div><div><span class="stepno">STEP 2</span><b>Transcript</b><p>Upload it. We read your marks automatically.</p></div><div><span class="stepno">STEP 3</span><b>Review</b><p>We confirm your transcript, usually within 48 hours.</p></div></div>
     </div></section>`;
   }
   async function tutorPending() {
@@ -573,6 +621,11 @@
           <div class="stats"><div><b>${s.answers_count || 0}</b><span>Answers</span></div><div><b>${money(Number(s.earned || 0))}</b><span>Earned</span></div><div><b>${s.answers_count ? Math.round((s.urgent_count || 0) / s.answers_count * 100) + "%" : "—"}</b><span>Urgent</span></div></div>
           ${p.bio ? `<p style="font-size:14px">${esc(p.bio)}</p>` : `<a href="#/profile">Add a short intro</a>`}
         </div>
+        ${p.equals_verified ? "" : `<div class="panel" style="gap:10px"><h3 style="font-size:18px">Get the ✓ My eQuals checkmark</h3>
+          <p class="muted" style="font-size:14px">${p.myequals_link ? "Thanks. We're checking your link and will add the checkmark once it matches your transcript." : "Share your transcript from My eQuals and paste the link. Verified tutors stand out to students."}</p>
+          <div class="row"><input type="url" id="eq-link" value="${esc(p.myequals_link || "")}" placeholder="https://www.myequals.edu.au/…" style="flex:1;min-width:180px"><button class="btn sm" id="eq-save">${p.myequals_link ? "Update" : "Save link"}</button></div>
+          <details><summary style="cursor:pointer;font-size:13px">How do I get a My eQuals link?</summary><ol style="margin:8px 0 0;padding-left:20px;font-size:13px;display:flex;flex-direction:column;gap:4px"><li>Order an official transcript from your uni. At UNSW, current students pay $20 and it's ready within 5 working days.</li><li>Open the email from My eQuals and sign in at myequals.edu.au.</li><li>Open your transcript, choose Share, then Public link (no PIN), with at least 30 days' expiry.</li><li>Copy the link and paste it here.</li></ol></details>
+          <div id="eq-st" hidden></div></div>`}
         <div class="panel" style="gap:10px"><div class="row" style="justify-content:space-between"><h3 style="font-size:18px">Courses I can tutor</h3><a href="#/tutor/apply">Add courses</a></div>
           <ul class="courses">${(tcs || []).map(x => `<li><span class="code">${esc(x.code)}</span><span class="ttl" title="${esc(x.title)}">${esc(x.title)}</span><span class="grade">${x.mark}<span class="badge ${gcls(x.grade || gradeFor(x.mark))}">${esc(x.grade || gradeFor(x.mark))}</span></span></li>`).join("")}</ul>
           <small class="muted">Courses at 85+ also receive "HD only" questions.</small></div>
@@ -587,8 +640,14 @@
         <div class="results-head"><h2>Pending questions</h2><span class="muted" style="font-size:13px">You can hold one question at a time</span></div>
         <div class="col" id="feed"><div class="boot" style="min-height:80px">Loading questions…</div></div>
       </div></div>`;
+    const eqSave = $("#eq-save");
+    if (eqSave) eqSave.onclick = async () => {
+      const link = $("#eq-link").value.trim();
+      if (link && !/^https:\/\/([\w-]+\.)*myequals\.(edu\.au|net|org)\//i.test(link)) return status($("#eq-st"), "That doesn't look like a My eQuals link.", "err");
+      try { await saveProfile({ myequals_link: link || null }); status($("#eq-st"), link ? "Saved. We'll check it and add your checkmark." : "Link removed.", "ok"); } catch (e) { status($("#eq-st"), errMsg(e), "err"); }
+    };
     await renderFeed();
-    every(30000, renderFeed);
+    every(20000, renderFeed);
     $("#feed").addEventListener("click", async e => {
       const c = e.target.closest("[data-claim]");
       if (c) {
@@ -801,8 +860,8 @@
     }
     function step3() {
       const rules = ["I'll explain concepts in my own words and won't complete assessable work for students.", "I won't share past assignments, exam answers or files. I'll only answer with text and markup on the student's document.", "The transcript I uploaded is my own, official and unedited."];
-      $("#body").innerHTML = `<h2>My eQuals verification</h2>
-        <p class="muted" style="font-size:14px">Every Distinction tutor is verified through My eQuals, the official digital transcript service used by Australian universities. Share your transcript from My eQuals and paste the link here. We use it to confirm your uploaded transcript is genuine.</p>
+      $("#body").innerHTML = `<h2>Verification</h2>
+        <p class="muted" style="font-size:14px">Add a My eQuals link to get a <b>✓ My eQuals</b> checkmark on your profile. My eQuals is the official digital transcript service used by Australian universities. It's optional: you can skip it now and add it later from your tutor profile.</p>
         <div class="panel" style="background:var(--surface-2);gap:10px;padding:16px">
           <b style="font-family:var(--display);font-size:17px">How to get your My eQuals link</b>
           <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14px">
@@ -811,9 +870,9 @@
             <li><b>Open your academic transcript and choose Share.</b> Pick <b>Public link</b> (without a PIN) and set the expiry to at least 30 days, so our reviewer can open it.</li>
             <li><b>Copy the link</b> and paste it below.</li>
           </ol>
-          <small class="muted">Waiting on your transcript? Your profile and uploaded transcript are saved. Come back to this step when your link arrives.</small>
+          <small class="muted">Waiting on your My eQuals transcript? Skip this for now and add the link later from your tutor profile.</small>
         </div>
-        <label class="field"><span>My eQuals share link</span><input type="url" id="eq" value="${esc(A.myequals)}" placeholder="https://www.myequals.edu.au/…" required></label>
+        <label class="field"><span>My eQuals share link (optional)</span><input type="url" id="eq" value="${esc(A.myequals)}" placeholder="https://www.myequals.edu.au/…"></label>
         <div class="agree">${rules.map((r, i) => `<label class="check"><input type="checkbox" data-ag="${i}" ${A.agree[i] ? "checked" : ""}><span>${r}</span></label>`).join("")}</div>
         <div id="st" hidden></div>
         <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="next">Continue</button></div>`;
@@ -821,8 +880,7 @@
       $("#back").onclick = () => { A.myequals = $("#eq").value.trim(); A.step = 2; render(); };
       $("#next").onclick = () => {
         A.myequals = $("#eq").value.trim();
-        if (!A.myequals) return status($("#st"), "Paste your My eQuals share link. It's required for every tutor.", "err");
-        if (!/^https:\/\/([\w-]+\.)*myequals\.(edu\.au|net|org)\//i.test(A.myequals)) return status($("#st"), "That doesn't look like a My eQuals link. It should start with https://www.myequals.edu.au/ or https://myequals.org/", "err");
+        if (A.myequals && !/^https:\/\/([\w-]+\.)*myequals\.(edu\.au|net|org)\//i.test(A.myequals)) return status($("#st"), "That doesn't look like a My eQuals link. It should start with https://www.myequals.edu.au/ or https://myequals.org/", "err");
         if (A.agree.some(x => !x)) return status($("#st"), "Tick all three boxes to continue.", "err");
         A.step = 4; render();
       };
@@ -830,7 +888,7 @@
     function step4() {
       const good = A.courses.filter(c => c.mark >= 75);
       $("#body").innerHTML = `<h2>Review and submit</h2>
-        <dl class="kv"><dt>Name</dt><dd>${esc(S.profile.full_name || "")} (${esc(S.profile.display_name || "")})</dd><dt>University</dt><dd>${esc(uniName(S.profile.uni_id))}</dd><dt>Degree</dt><dd>${esc(S.profile.degree || "")}</dd><dt>Transcript</dt><dd>${esc(A.file.name)}</dd><dt>My eQuals</dt><dd>Link provided</dd></dl>
+        <dl class="kv"><dt>Name</dt><dd>${esc(S.profile.full_name || "")} (${esc(S.profile.display_name || "")})</dd><dt>University</dt><dd>${esc(uniName(S.profile.uni_id))}</dd><dt>Degree</dt><dd>${esc(S.profile.degree || "")}</dd><dt>Transcript</dt><dd>${esc(A.file.name)}</dd><dt>My eQuals</dt><dd>${A.myequals ? "Link provided" : "Not yet. You can add it later for the checkmark."}</dd></dl>
         ${good.length ? `<p style="font-size:14px"><b>Courses sent for approval</b></p><ul class="courses">${good.map(c => `<li><span class="code">${esc(c.code)}</span><span class="ttl">${esc(c.title)}</span><span class="grade">${c.mark}<span class="badge ${gcls(c.grade || gradeFor(c.mark))}">${esc(c.grade || gradeFor(c.mark))}</span></span></li>`).join("")}</ul>` : `<div class="status">Our reviewer will read your courses from your transcript and approve the ones at 75 or above.</div>`}
         <div id="st" hidden></div>
         <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="go">Submit application</button></div>`;
@@ -894,8 +952,8 @@
   /* ---------------- admin ---------------- */
   async function pageAdmin() {
     if (!S.profile.is_admin) { app().innerHTML = `<div class="empty">Admins only.</div>`; return; }
-    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">Admin</h1><div class="seg" style="min-width:260px"><label><input type="radio" name="ad" value="apps" checked><span>Applications</span></label><label><input type="radio" name="ad" value="reports"><span>Reports</span></label></div></div><div id="ad-body"></div></section>`;
-    document.querySelectorAll('input[name="ad"]').forEach(r => r.onchange = () => r.value === "apps" ? adminApps() : adminReports());
+    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">Admin</h1><div class="seg" style="min-width:360px"><label><input type="radio" name="ad" value="apps" checked><span>Applications</span></label><label><input type="radio" name="ad" value="equals"><span>My eQuals</span></label><label><input type="radio" name="ad" value="reports"><span>Reports</span></label></div></div><div id="ad-body"></div></section>`;
+    document.querySelectorAll('input[name="ad"]').forEach(r => r.onchange = () => r.value === "apps" ? adminApps() : r.value === "equals" ? adminEquals() : adminReports());
     adminApps();
   }
   async function adminApps(selected) {
@@ -916,7 +974,7 @@
       <div class="table-wrap"><table><thead><tr><th></th><th>Code</th><th>Course</th><th>Mark</th><th>Grade</th></tr></thead><tbody>
       ${(tcs || []).map(c => `<tr><td><input type="checkbox" data-c="${c.id}" checked aria-label="Approve ${esc(c.code)}"></td><td class="mono">${esc(c.code)}</td><td>${esc(c.title)}</td><td class="num">${c.mark}</td><td>${esc(c.grade || "")}</td></tr>`).join("")}</tbody></table></div>
       <details><summary style="cursor:pointer;font-size:14px;font-weight:500">Add a course the scan missed</summary><div class="row" style="margin-top:8px"><input type="text" id="ad-code" placeholder="Code" style="width:110px;font-family:var(--mono);text-transform:uppercase"><input type="text" id="ad-title" placeholder="Course name" style="flex:1;min-width:140px"><input type="number" id="ad-mark" placeholder="Mark" min="75" max="100" style="width:80px"><input type="text" id="ad-grade" placeholder="Grade" style="width:70px"><button class="btn sm" id="ad-add">Add</button></div></details>
-      <label class="check"><input type="checkbox" id="ad-eq"> I opened the My eQuals link and it matches the uploaded transcript</label>
+      ${cur.myequals_link ? '<label class="check"><input type="checkbox" id="ad-eq"> I opened the My eQuals link and it matches. Give the ✓ My eQuals checkmark.</label>' : '<input type="checkbox" id="ad-eq" hidden>'}
       <label class="field"><span>Note to applicant (shown if rejected)</span><textarea class="prose" id="ad-notes" style="min-height:60px" maxlength="500"></textarea></label>
       <div id="st" hidden></div>
       <div class="row" style="justify-content:space-between"><button class="btn" id="ad-reject">Reject</button><button class="btn primary" id="ad-approve">Approve ticked courses</button></div>`;
@@ -937,8 +995,22 @@
       if (error) return status($("#st"), errMsg(error), "err");
       toast("Course added"); adminApps(cur.id);
     };
-    $("#ad-approve").onclick = () => { if (!$("#ad-eq").checked) return status($("#st"), "Open the My eQuals link and confirm it matches before approving.", "err"); decide(true); };
+    $("#ad-approve").onclick = () => decide(true);
     $("#ad-reject").onclick = () => decide(false);
+  }
+  async function adminEquals() {
+    const body = $("#ad-body");
+    const { data, error } = await sb.from("profiles").select("id, full_name, display_name, uni_id, myequals_link, equals_verified").not("myequals_link", "is", null).neq("tutor_status", "none").order("equals_verified");
+    if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
+    body.innerHTML = data.length ? `<div class="col">${data.map(t => `<div class="answer-card"><div class="row" style="justify-content:space-between"><span><b>${esc(t.full_name || "")}</b> <span class="muted">${esc(uniShort(t.uni_id))}</span></span><span class="status-pill ${t.equals_verified ? "approved" : "pending"}">${t.equals_verified ? "Verified" : "To check"}</span></div>
+      <a href="${esc(t.myequals_link)}" target="_blank" rel="noopener noreferrer">Open My eQuals link ↗</a>
+      <div class="row" style="justify-content:flex-end">${t.equals_verified ? `<button class="btn sm" data-eqv="${t.id}:0">Remove checkmark</button>` : `<button class="btn primary sm" data-eqv="${t.id}:1">Matches: give checkmark</button>`}</div></div>`).join("")}</div>` : `<div class="empty">No My eQuals links to check.</div>`;
+    body.onclick = async e => {
+      const b = e.target.closest("[data-eqv]"); if (!b) return;
+      const [uid, v] = b.dataset.eqv.split(":");
+      const { error } = await sb.rpc("admin_set_equals", { p_user: uid, p_verified: v === "1" });
+      if (error) return toast(errMsg(error)); toast(v === "1" ? "Checkmark given" : "Checkmark removed"); adminEquals();
+    };
   }
   async function adminReports() {
     const body = $("#ad-body");

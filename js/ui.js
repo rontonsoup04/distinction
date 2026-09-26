@@ -45,9 +45,9 @@
     }
     function paint() {
       const o = find(value);
-      val.innerHTML = o ? `<span class="${cfg.mono ? "mono" : ""}">${esc(o.label)}</span>${o.sub && !o.custom ? `<span class="gsel-sub">${esc(o.sub)}</span>` : ""}` : `<span class="muted">${esc(cfg.placeholder || "Choose")}</span>`;
+      val.innerHTML = o ? `<span class="${cfg.mono ? "mono" : ""}">${esc(o.short || o.label)}</span>${o.sub && !o.custom && !cfg.hideSub ? `<span class="gsel-sub">${esc(o.sub)}</span>` : ""}` : `<span class="muted">${esc(cfg.placeholder || "Choose")}</span>`;
       const items = shown(); if (active >= items.length) active = items.length - 1; if (active < 0) active = 0;
-      list.innerHTML = items.length ? items.map((o, i) => `<li role="option" id="${id}-o${i}" data-i="${i}" aria-selected="${o.value === value}" class="${i === active ? "active" : ""}"><span class="o-main${cfg.mono ? " mono" : ""}">${esc(o.label)}</span>${o.sub ? `<span class="o-sub">${esc(o.sub)}</span>` : "<span></span>"}<svg class="o-tick" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7.5l2.5 2.5L11 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></li>`).join("") : `<li class="gsel-empty">${esc(cfg.emptyText || "No matches.")}</li>`;
+      list.innerHTML = items.length ? items.map((o, i) => `<li role="option" id="${id}-o${i}" data-i="${i}" aria-selected="${o.value === value}" class="${i === active ? "active" : ""}"><span class="o-main${cfg.mono ? " mono" : " wrap"}">${esc(o.label)}</span>${o.sub ? `<span class="o-sub">${esc(o.sub)}</span>` : "<span></span>"}<svg class="o-tick" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7.5l2.5 2.5L11 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></li>`).join("") : `<li class="gsel-empty">${esc(cfg.emptyText || "No matches.")}</li>`;
       list.setAttribute("aria-activedescendant", items.length ? `${id}-o${active}` : "");
       list._items = items;
     }
