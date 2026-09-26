@@ -289,6 +289,8 @@ tr.ineligible td{color:var(--muted)}
 .recruit:hover{border-style:solid}
 .recruit-go{font-weight:600;color:var(--accent);white-space:nowrap}
 @media (max-width:700px){.pitch{grid-template-columns:1fr}}
+.urgent-check{margin-top:4px;padding:8px 10px;border:1px dashed var(--line);border-radius:10px}
+.urgent-check:has(input:checked){border-style:solid;border-color:var(--hd);background:color-mix(in srgb,var(--hd) 16%,transparent)}
 /* tutor profile */
 .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;align-items:start}
 .tutor-layout{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start}
@@ -427,7 +429,7 @@ tr.ineligible td{color:var(--muted)}
         <div><span class="stepno">2 · CHOOSE</span><b>Who answers</b><p>Distinction and up, or HD only. Add My eQuals verification if you want extra certainty.</p></div>
         <div><span class="stepno">3 · GET</span><b>Fast answers</b><p>One flat price. Spots nobody fills are refunded when the question closes.</p></div>
       </div>
-      <a class="recruit" href="#tutor" data-go="tutor"><span><b>Got an HD?</b> Earn up to $26 an hour answering quick questions in the courses you aced.</span><span class="recruit-go">Start earning →</span></a>
+      <a class="recruit" href="#tutor" data-go="tutor"><span><b>Got an HD?</b> Earn up to $34 an hour answering quick questions in the courses you aced.</span><span class="recruit-go">Start earning →</span></a>
     </div>
     <div class="panel composer">
       <div class="two tight">
@@ -460,6 +462,7 @@ tr.ineligible td{color:var(--muted)}
           <label><input type="radio" name="a-count" value="3"><span class="box"><b>3</b><small>answers</small><em>$4.50</em></span></label>
           <label><input type="radio" name="a-count" value="5"><span class="box"><b>5</b><small>answers</small><em>$7.50</em></span></label>
         </div>
+        <label class="check urgent-check"><input type="checkbox" id="a-urgent"><span><b>Urgent</b>: answers within 20 minutes <em class="plus-cr" id="a-urgent-fee">+$1.50</em></span></label>
       </div>
       <div class="post-row">
         <div class="field dur"><span id="a-dur-lbl">Open for</span><div class="gsel" id="a-dur" data-label="a-dur-lbl"></div></div>
@@ -479,8 +482,8 @@ tr.ineligible td{color:var(--muted)}
 <section class="view" id="v-teach" hidden>
   <div class="intro">
     <div>
-      <h1>Turn your best marks into up to $26 an hour.</h1>
-      <p>Upload your transcript and our AI reads every course and mark. Anything at Distinction (75+) or above becomes a course you can tutor. Then answer short questions from students for $1.10 each, or $1.30 if you answer within 20 minutes. Most take about 3 minutes, whenever you have a spare few minutes.</p>
+      <h1>Turn your best marks into up to $34 an hour.</h1>
+      <p>Upload your transcript and our AI reads every course and mark. Anything at Distinction (75+) or above becomes a course you can tutor. Then answer short questions from students for $1.10 each, or $1.70 for urgent questions answered within 20 minutes. Most take about 3 minutes, whenever you have a spare few minutes.</p>
     </div>
     <div class="how">
       <div><span class="stepno">STEP 1</span><b>Upload</b><p>PDF, screenshot or pasted text of your transcript.</p></div>
@@ -584,7 +587,7 @@ tr.ineligible td{color:var(--muted)}
 (function(){
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const KEY="distinction-demo-v7";
+const KEY="distinction-demo-v8";
 
 /* Starter course lists per uni. Replace with real handbook data. */
 const UNIS={
@@ -654,12 +657,12 @@ if(!S.questions)S.questions=seedQuestions();
 function seedQuestions(){
   const H=3600e3,M=60e3,now=Date.now();
   return [
-    {id:"q1",asker:"Mia T.",uni:"UNSW",course:"INFS2608",text:"When normalising to 3NF, how do I tell a transitive dependency apart from a normal one? My schema for assignment 2 keeps getting marked down. Diagram attached.",per:3,slots:3,reward:4,minMark:85,verifiedOnly:true,wide:true,mine:false,at:now-6*M,expires:now+6*H,attach:{name:"assignment2_erd.png",size:48213,type:"image/png",thumb:ERD_SVG},answers:[{by:"Tom N.",mark:92,grade:"HD",equals:true,text:"Check whether a non-key column depends on another non-key column. CourseTitle depends on CourseCode, not StudentID, so split it out.",at:now-4*M}]},
-    {id:"q2",asker:"Chloe L.",uni:"UNSW",course:"INFS1602",text:"Is digital transformation just digitisation? The week 3 tute question asks us to compare them. Questions attached.",per:2,slots:5,reward:3,minMark:75,verifiedOnly:false,mine:false,at:now-2*M,expires:now+H,attach:{name:"Week3_tute_questions.pdf",size:245760,type:"application/pdf"},answers:[]},
-    {id:"q3",asker:"Jordan K.",uni:"UNSW",course:"INFS1609",text:"What's the difference between an ArrayList and an array in Java, and when would the exam expect me to use each?",per:2,slots:2,reward:3,minMark:75,verifiedOnly:false,mine:false,at:now-13*M,expires:now+3*H,attach:null,answers:[]},
-    {id:"q4",asker:"Grace H.",uni:"UNSW",course:"INFS2603",text:"For the business analysis assignment, should requirements be written as use cases or user stories? The spec mentions both.",per:3,slots:3,reward:4,minMark:75,verifiedOnly:true,mine:false,at:now-16*M,expires:now+12*H,attach:null,answers:[]},
+    {id:"q1",urgent:true,asker:"Mia T.",uni:"UNSW",course:"INFS2608",text:"When normalising to 3NF, how do I tell a transitive dependency apart from a normal one? My schema for assignment 2 keeps getting marked down. Diagram attached.",per:3,slots:3,reward:4,minMark:85,verifiedOnly:true,wide:true,mine:false,at:now-6*M,expires:now+6*H,attach:{name:"assignment2_erd.png",size:48213,type:"image/png",thumb:ERD_SVG},answers:[{by:"Tom N.",mark:92,grade:"HD",equals:true,text:"Check whether a non-key column depends on another non-key column. CourseTitle depends on CourseCode, not StudentID, so split it out.",at:now-4*M}]},
+    {id:"q2",urgent:true,asker:"Chloe L.",uni:"UNSW",course:"INFS1602",text:"Is digital transformation just digitisation? The week 3 tute question asks us to compare them. Questions attached.",per:2,slots:5,reward:3,minMark:75,verifiedOnly:false,mine:false,at:now-2*M,expires:now+H,attach:{name:"Week3_tute_questions.pdf",size:245760,type:"application/pdf"},answers:[]},
+    {id:"q3",urgent:true,asker:"Jordan K.",uni:"UNSW",course:"INFS1609",text:"What's the difference between an ArrayList and an array in Java, and when would the exam expect me to use each?",per:2,slots:2,reward:3,minMark:75,verifiedOnly:false,mine:false,at:now-13*M,expires:now+3*H,attach:null,answers:[]},
+    {id:"q4",urgent:true,asker:"Grace H.",uni:"UNSW",course:"INFS2603",text:"For the business analysis assignment, should requirements be written as use cases or user stories? The spec mentions both.",per:3,slots:3,reward:4,minMark:75,verifiedOnly:true,mine:false,at:now-16*M,expires:now+12*H,attach:null,answers:[]},
     {id:"q5",asker:"Ethan R.",uni:"UNSW",course:"INFS3604",text:"In BPMN, when do I use an inclusive gateway instead of an exclusive one? My process model has a step where one or both approvals can happen.",per:2,slots:2,reward:3,minMark:75,verifiedOnly:false,mine:false,at:now-28*M,expires:now+12*H,attach:null,answers:[]},
-    {id:"q7",asker:"Hugo D.",uni:"UTS",course:"31271",text:"How do I write a query that finds customers who have never placed an order? LEFT JOIN or NOT EXISTS?",per:2,slots:3,reward:3,minMark:75,verifiedOnly:false,wide:true,mine:false,at:now-9*M,expires:now+6*H,attach:null,answers:[{by:"Zara A.",uni:"UTS",via:"31271",mark:93,grade:"HD",equals:false,text:"Both work. NOT EXISTS is usually clearer and handles NULLs safely.",at:now-5*M}]},
+    {id:"q7",urgent:true,asker:"Hugo D.",uni:"UTS",course:"31271",text:"How do I write a query that finds customers who have never placed an order? LEFT JOIN or NOT EXISTS?",per:2,slots:3,reward:3,minMark:75,verifiedOnly:false,wide:true,mine:false,at:now-9*M,expires:now+6*H,attach:null,answers:[{by:"Zara A.",uni:"UTS",via:"31271",mark:93,grade:"HD",equals:false,text:"Both work. NOT EXISTS is usually clearer and handles NULLs safely.",at:now-5*M}]},
     {id:"q8",asker:"Isla N.",uni:"MONASH",course:"FIT1045",text:"Why does my while loop never stop when I read input until the user types 'quit'?",per:2,slots:2,reward:3,minMark:75,verifiedOnly:false,wide:true,mine:false,at:now-35*M,expires:now+3*H,attach:null,answers:[]},
     {id:"q6",asker:"Sam W.",uni:"UNSW",course:"COMP1511",text:"Why does my program segfault when I free a node in the middle of a linked list?",per:4,slots:3,reward:3,minMark:75,verifiedOnly:false,mine:false,at:now-50*M,expires:now+2*H,attach:null,answers:[{by:"Marcus L.",mark:95,grade:"HD",equals:true,text:"You're probably freeing the node before relinking. Save prev->next = curr->next first, then free(curr).",at:now-40*M}]}
   ];
@@ -898,14 +901,14 @@ function glassSelect(el,cfg){
 }
 
 /* composer */
-const PRICE={2:3,3:4.5,5:7.5},HD_EXTRA=0.5,EQ_EXTRA=0.5;
+const PRICE={2:3,3:4.5,5:7.5},HD_EXTRA=0.5,EQ_EXTRA=0.5,URGENT_FEE=0.75; /* urgent fee is per answer */
 const DURS=[{value:"1",label:"1 hour"},{value:"3",label:"3 hours"},{value:"6",label:"6 hours"},{value:"12",label:"12 hours"},{value:"24",label:"1 day",sub:"Most answers"}];
 const courseOpts=uni=>Object.entries(UNIS[uni].courses).map(([k,t])=>({value:k,label:k,sub:t}));
 const uniSel=glassSelect($("#a-uni"),{options:Object.entries(UNIS).map(([k,u])=>({value:k,label:u.name})),value:"UNSW",onChange:v=>{courseSel.setOptions(courseOpts(v),Object.keys(UNIS[v].courses)[0]);composer()}});
 const courseSel=glassSelect($("#a-course"),{options:courseOpts("UNSW"),value:"COMP1511",mono:true,search:"Search or type a course code",freeText:c=>/^[A-Z]{0,5}\d{4,5}$/.test(c),onChange:composer});
 const durSel=glassSelect($("#a-dur"),{options:DURS,value:"24",onChange:composer});
 $("#a-text").addEventListener("input",composer);
-document.querySelectorAll('input[name="a-grade"],input[name="a-count"],#a-verified,#a-wide').forEach(el=>el.addEventListener("change",composer));
+document.querySelectorAll('input[name="a-grade"],input[name="a-count"],#a-verified,#a-wide,#a-urgent').forEach(el=>el.addEventListener("change",composer));
 
 let attach=null; // {file,name,size,type,thumb}
 $("#a-file").addEventListener("change",async e=>{
@@ -923,24 +926,26 @@ function renderAttach(){
 }
 $("#a-file-chip").addEventListener("click",e=>{if(e.target.id==="a-file-rm"){attach=null;renderAttach()}});
 
-function priceFor(count,minMark,verifiedOnly){return r2(PRICE[count]+(minMark>=85?HD_EXTRA:0)+(verifiedOnly?EQ_EXTRA:0))}
+function priceFor(count,minMark,verifiedOnly,urgent){return r2(PRICE[count]+(minMark>=85?HD_EXTRA:0)+(verifiedOnly?EQ_EXTRA:0)+(urgent?URGENT_FEE*count:0))}
 function draft(){
   const uni=uniSel.value,code=courseSel.value;
   const minMark=+document.querySelector('input[name="a-grade"]:checked').value;
-  const verifiedOnly=$("#a-verified").checked,wide=$("#a-wide").checked;
+  const verifiedOnly=$("#a-verified").checked,wide=$("#a-wide").checked,urgent=$("#a-urgent").checked;
   const count=+document.querySelector('input[name="a-count"]:checked').value;
-  const cost=priceFor(count,minMark,verifiedOnly);
-  return {uni,code,minMark,verifiedOnly,wide,count,cost,per:Math.round(cost/count*100)/100,hours:+durSel.value,text:$("#a-text").value.trim()};
+  const cost=priceFor(count,minMark,verifiedOnly,urgent);
+  return {uni,code,minMark,verifiedOnly,wide,urgent,count,cost,per:Math.round(cost/count*100)/100,hours:+durSel.value,text:$("#a-text").value.trim()};
 }
 const validCode=c=>/^[A-Z]{0,5}\d{4,5}$/.test(c||"");
 function composer(){
   const d=draft();
   const w=words($("#a-text").value);
   const wl=$("#a-words");wl.textContent=`${w} / ${WORD_LIMIT} words`;wl.classList.toggle("over",w>WORD_LIMIT);
-  document.querySelectorAll('input[name="a-count"]').forEach(r=>{r.parentElement.querySelector("em").textContent=money(priceFor(+r.value,d.minMark,d.verifiedOnly))});
+  document.querySelectorAll('input[name="a-count"]').forEach(r=>{r.parentElement.querySelector("em").textContent=money(priceFor(+r.value,d.minMark,d.verifiedOnly,d.urgent))});
+  $("#a-urgent-fee").textContent="+"+money(URGENT_FEE*d.count);
   const parts=[`${d.count} answers · ${money(PRICE[d.count])}`];
   if(d.minMark>=85)parts.push(`HD only · +50c`);
   if(d.verifiedOnly)parts.push(`Verified · +50c`);
+  if(d.urgent)parts.push(`Urgent · +${money(URGENT_FEE*d.count)}`);
   $("#a-cost").innerHTML=`<small>${parts.join(" + ")}</small><b class="mono">${money(d.cost)}</b>`;
 }
 
@@ -953,7 +958,7 @@ $("#a-post").onclick=()=>{
   if(w>WORD_LIMIT)return err(`Your question is ${w} words. Cut it to ${WORD_LIMIT} or fewer.`);
   if(d.cost>S.credits)return err(`You need ${money(d.cost-S.credits)} more. <a href="#wallet" data-go="wallet">Top up in your wallet</a> or choose fewer answers.`);
   const now=Date.now();
-  const q={id:"q"+now,asker:"You",reward:(d.minMark>=85||d.verifiedOnly)?4:3,uni:d.uni,course:d.code,text:d.text,per:d.per,total:d.cost,slots:d.count,minMark:d.minMark,verifiedOnly:d.verifiedOnly,wide:d.wide,mine:true,at:now,expires:now+d.hours*3600e3,answers:[],
+  const q={id:"q"+now,asker:"You",reward:(d.minMark>=85||d.verifiedOnly)?4:3,uni:d.uni,course:d.code,text:d.text,per:d.per,total:d.cost,slots:d.count,minMark:d.minMark,verifiedOnly:d.verifiedOnly,wide:d.wide,urgent:d.urgent,mine:true,at:now,expires:now+d.hours*3600e3,answers:[],
     attach:attach?{name:attach.name,size:attach.size,type:attach.type,thumb:attach.thumb}:null};
   const file=attach&&attach.type.startsWith("image/")?attach.file:null;
   S.questions.unshift(q);addTx(`Question in ${d.code} (${d.count} answers)`,-d.cost);save();
@@ -981,6 +986,7 @@ async function simulateAnswers(q,file){
     setTimeout(()=>{
       const cur=S.questions.find(x=>x.id===q.id);if(!cur||cur.answers.length>=cur.slots||Date.now()>cur.expires)return;
       const x=matchCourse(t,q)||{};
+      if(cur.urgent&&Date.now()>cur.at+20*60e3)addTx(`Urgent fee refunded: an answer in ${cur.course} took over 20 min`,URGENT_FEE);
       cur.answers.push({uni:t.uni,via:x.code,by:t.name,mark:x.mark,grade:x.grade,equals:t.equals,text:(texts&&texts[i])||`Demo answer: on the live site ${t.name} would reply here with their explanation.`,at:Date.now()});
       save();renderMyQs();toast(`${t.name} answered your ${q.course} question`);
     },(texts?1500:3000)+i*(2500+Math.random()*2500));
@@ -1011,7 +1017,7 @@ function qCard(q){
   const closed=Date.now()>q.expires;
   const bar=`<span class="slotbar">${Array.from({length:q.slots},(_,i)=>`<i class="${i<q.answers.length?"on":""}"></i>`).join("")}</span>`;
   const reach=holders(q.uni,q.course,q.minMark,q.verifiedOnly,q.wide).length;
-  const tags=[q.minMark>=85?"HD only":"Distinction and HD",q.verifiedOnly?"My eQuals verified":null].filter(Boolean);
+  const tags=[q.urgent?"Urgent":null,q.minMark>=85?"HD only":"Distinction and HD",q.verifiedOnly?"My eQuals verified":null].filter(Boolean);
   return `<article class="q${closed?" closed":""}">
     <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course)}</span><span class="q-time">${esc(q.uni)} · ${ago(q.at)}</span></span><span class="q-exp${closed?"":" live"}" data-exp="${q.expires}">${left(q.expires)}</span></div>
     <p class="q-text">${esc(q.text)}</p>
@@ -1048,12 +1054,12 @@ $("#my-qs").addEventListener("click",e=>{
 
 const initials=n=>n.split(/\s+/).map(w=>w[0]).join("").slice(0,2).toUpperCase();
 /* TUTOR PROFILE */
-const EB_MIN=20,CLAIM_MIN=10,EB_BONUS=0.2,MIN_PER_ANSWER=3,WEEKLY_GOAL=20,WEEKLY_BONUS=5;
+const EB_MIN=20,CLAIM_MIN=10,URGENT_PAY=1.7,MIN_PER_ANSWER=3,WEEKLY_GOAL=20,WEEKLY_BONUS=5;
 const rewardOf=q=>1.1;
-const MAX_HOURLY=r2(60/MIN_PER_ANSWER*(1.1+EB_BONUS));
-const ebPay=q=>r2(rewardOf(q)+EB_BONUS);
+const MAX_HOURLY=r2(60/MIN_PER_ANSWER*URGENT_PAY);
+const ebPay=q=>URGENT_PAY;
 const ebEnd=q=>q.at+EB_MIN*60e3;
-const ebLeft=q=>ebEnd(q)-Date.now();
+const ebLeft=q=>q.urgent?ebEnd(q)-Date.now():-1;
 const mins=ms=>Math.max(0,Math.ceil(ms/60e3));
 const drafts={};
 let ebState="";
@@ -1075,9 +1081,9 @@ function tqCard(q){
   const full=q.answers.length>=q.slots;
   const claimed=q.claim&&q.claim.until>Date.now();
   const spots=q.slots-q.answers.length;
-  const tags=[q.minMark>=85?"HD only":null,q.verifiedOnly?"Verified only":null].filter(Boolean);
+  const tags=[q.urgent&&!eb?"Urgent (window passed)":null,q.minMark>=85?"HD only":null,q.verifiedOnly?"Verified only":null].filter(Boolean);
   let action;
-  if(mineIdx>=0){const a=q.answers[mineIdx];action=`<div class="elig yes">✓ You answered ${ORD[mineIdx]} and earned ${money(a.payout)}${a.early?" (early bird)":""}</div>`}
+  if(mineIdx>=0){const a=q.answers[mineIdx];action=`<div class="elig yes">✓ You answered ${ORD[mineIdx]} and earned ${money(a.payout)}${a.early?" (urgent rate)":""}</div>`}
   else if(full)action=`<div class="muted" style="font-size:13px">All ${q.slots} spots have been answered.</div>`;
   else if(claimed)action=`<label class="field"><span>Your answer</span><textarea class="prose" id="ans-${q.id}" data-draft="${q.id}" style="min-height:100px" placeholder="Explain it the way you wish someone had explained it to you.">${esc(drafts[q.id]||"")}</textarea></label>
     <div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">Spot held for you · <span data-claim="${q.claim.until}">${mins(q.claim.until-Date.now())} min</span> left · <button class="linkbtn" data-release="${q.id}">Release</button></span><button class="btn primary sm" data-submit="${q.id}">Submit answer for $${eb?ebPay(q):rw}</button></div>`;
@@ -1087,7 +1093,7 @@ function tqCard(q){
     <div class="tq-head">
       <div class="avatar sm" aria-hidden="true">${esc(initials(q.asker||"Student"))}</div>
       <div style="min-width:0;flex:1"><b>${esc(q.asker||"Student")}</b><div class="q-time">${esc(UNIS[q.uni]?UNIS[q.uni].name:q.uni)} · ${ago(q.at)}</div></div>
-      <div class="reward-box${eb?" eb":""}">${eb?`<span class="eb-tag">Early bird</span><b>${money(ebPay(q))}</b><small><span data-eb="${ebEnd(q)}">${mins(ebLeft(q))} min</span> left, then ${money(rw)}</small>`:`<b>${money(rw)}</b><small>Reward</small>`}</div>
+      <div class="reward-box${eb?" eb":""}">${eb?`<span class="eb-tag">Urgent</span><b>${money(ebPay(q))}</b><small><span data-eb="${ebEnd(q)}">${mins(ebLeft(q))} min</span> left, then ${money(rw)}</small>`:`<b>${money(rw)}</b><small>Reward</small>`}</div>
     </div>
     <div class="row" style="gap:6px"><span class="q-code">${esc(q.course)}</span><span class="muted" style="font-size:13px">${esc(titleOf(q.uni,q.course))}</span>${(()=>{const me=S.tutors.find(t=>t.id==="me");const x=me&&matchCourse(me,q);return x&&(q.uni!==me.uni||x.code!==q.course)?`<span class="simchip">Similar to your ${esc(x.code)}</span>`:""})()}${tags.map(t=>`<span class="tagchip">${t}</span>`).join("")}</div>
     <p class="q-text">${esc(q.text)}</p>
@@ -1105,7 +1111,7 @@ function incentivesHTML(me,rs,r){
   const top=r>=4.8&&answered>=50;
   const pct=n=>Math.min(100,Math.round(n*100));
   return `<div class="pitch">
-    <div class="pitch-main"><span class="eyebrow">Your earning potential</span><div class="pitch-big">Up to <b>${money(MAX_HOURLY)}</b> an hour</div><p>Questions are 50 words or less, so most answers take about 3 minutes. Answer 20 an hour at the $1.30 early-bird rate, from your phone, between classes. No lesson plans, no fixed hours.</p>
+    <div class="pitch-main"><span class="eyebrow">Your earning potential</span><div class="pitch-big">Up to <b>${money(MAX_HOURLY)}</b> an hour</div><p>Questions are 50 words or less, so most answers take about 3 minutes. Answer 20 urgent questions an hour at $1.70 each, from your phone, between classes. No lesson plans, no fixed hours.</p>
       <div class="pitch-now">This hour: <b>${money(hourEarn)}</b> from ${hour.length} answer${hour.length===1?"":"s"}</div></div>
     <div class="goals">
       <div class="goal"><div class="row" style="justify-content:space-between"><b>Weekly bonus</b><span class="mono">+$${WEEKLY_BONUS}</span></div><div class="meter"><i style="width:${pct(week/WEEKLY_GOAL)}%"></i></div><small>${week>=WEEKLY_GOAL?"Unlocked. Paid out on Monday.":`${week} of ${WEEKLY_GOAL} answers this week`}</small></div>
@@ -1115,7 +1121,7 @@ function incentivesHTML(me,rs,r){
 }
 function renderTutor(){
   const me=S.tutors.find(t=>t.id==="me");const root=$("#tutor-root");
-  if(!me){root.innerHTML=`<div class="locked" style="max-width:560px"><h2 style="font-size:24px">Set up your tutor profile</h2><p class="muted">Scan your transcript to find the courses you can tutor, then start answering questions for $1.10 each ($1.30 early bird). Fast tutors earn up to $26 an hour.</p><button class="btn primary" data-go="teach">Scan my transcript</button></div>`;return}
+  if(!me){root.innerHTML=`<div class="locked" style="max-width:560px"><h2 style="font-size:24px">Set up your tutor profile</h2><p class="muted">Scan your transcript to find the courses you can tutor, then start answering questions for $1.10 each ($1.70 for urgent questions). Fast tutors earn up to $34 an hour.</p><button class="btn primary" data-go="teach">Scan my transcript</button></div>`;return}
   const rs=me.reviews||[];const r=avg(rs);
   const answered=(me.answeredBase||0)+S.payouts.length;
   const early=S.payouts.filter(p=>p.early).length;
@@ -1136,7 +1142,7 @@ function renderTutor(){
         <div class="stats">
           <div><b>${answered}</b><span>Answers</span></div>
           <div><b>${money(S.earnedTotal)}</b><span>Earned</span></div>
-          <div><b>${S.payouts.length?Math.round(early/S.payouts.length*100)+"%":"—"}</b><span>Early bird</span></div>
+          <div><b>${S.payouts.length?Math.round(early/S.payouts.length*100)+"%":"—"}</b><span>Urgent</span></div>
         </div>
         ${me.bio?`<p style="font-size:14px">${esc(me.bio)}</p>`:""}
       </div>
@@ -1153,11 +1159,11 @@ function renderTutor(){
     <div class="col">
       <div class="earn-strip">
         <div><div class="eyebrow" style="color:inherit;opacity:.7">Ready to cash out</div><div class="earn-amt">${money(S.earnings)}</div></div>
-        <div class="earn-rules"><span><b>$1.10</b> per answer</span><span class="ebr"><b>$1.30</b> early bird, answered within 20 min of posting</span><span><b>+$5</b> weekly bonus for 20 answers</span></div>
+        <div class="earn-rules"><span><b>$1.10</b> per answer</span><span class="ebr"><b>$1.70</b> urgent questions answered within 20 min</span><span><b>+$5</b> weekly bonus for 20 answers</span></div>
         <button class="btn" id="cashout" ${S.earnings?"":"disabled"}>Cash out</button>
       </div>
       ${incentivesHTML(me,rs,r)}
-      <div class="results-head"><h2>Pending questions</h2><span class="muted" style="font-size:13px">You can hold one question at a time</span><span class="muted" style="font-size:14px">${openCount} open${ebCount?` · <b style="color:var(--accent)">${ebCount} early bird</b>`:""}</span></div>
+      <div class="results-head"><h2>Pending questions</h2><span class="muted" style="font-size:13px">You can hold one question at a time</span><span class="muted" style="font-size:14px">${openCount} open${ebCount?` · <b style="color:var(--accent)">${ebCount} urgent</b>`:""}</span></div>
       ${needsEq?`<div class="status">${needsEq} more question${needsEq>1?"s":""} in your courses ${needsEq>1?"are":"is"} only for students verified with My eQuals. <a href="#teach" data-go="teach">Add your My eQuals link</a> to see ${needsEq>1?"them":"it"}.</div>`:""}
       <div class="col" id="t-qs">${list.length?list.map(tqCard).join(""):`<div class="empty">No open questions in your courses right now. New ones will show up here.</div>`}</div>
     </div>
@@ -1184,7 +1190,7 @@ $("#tutor-root").addEventListener("click",e=>{
     q.answers.push({by:me.name+" (you)",mark:x.mark,grade:x.grade,equals:me.equals,text:txt,at:Date.now(),byMe:true,payout,early});
     delete q.claim;delete drafts[q.id];
     S.earnings+=payout;S.earnedTotal+=payout;S.payouts.unshift({q:q.id,course:q.course,amount:payout,early,at:Date.now()});
-    save();renderTutor();toast(`+${money(payout)}${early?" early bird":""} for your ${q.course} answer`);
+    save();renderTutor();toast(`+${money(payout)}${early?" urgent rate":""} for your ${q.course} answer`);
     setTimeout(()=>{
       const stars=Math.random()<.75?5:4;
       me.reviews=me.reviews||[];me.reviews.unshift({by:q.asker||"Student",course:q.course,stars,text:REVIEW_TEXT[Math.floor(Math.random()*REVIEW_TEXT.length)],at:Date.now()});

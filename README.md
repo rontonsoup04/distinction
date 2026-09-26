@@ -21,7 +21,7 @@ Distinction is a peer-tutoring marketplace for university students. Pick your un
 - Profile with star rating, reviews, and the courses you can tutor
 - Transcript scanning finds every course you scored 75+ in
 - Claim one question at a time (10-minute hold), then answer it
-- Earn $1.10 per answer, or $1.30 if answered within 20 minutes of posting (early bird). Most answers take about 3 minutes, so fast tutors can earn up to $26 an hour
+- Earn $1.10 per answer, or $1.70 for urgent questions answered within 20 minutes. Most answers take about 3 minutes, so fast tutors can earn up to $34 an hour
 - Weekly bonus and Top Tutor progress
 
 ## Pricing (prototype)
@@ -34,7 +34,9 @@ Distinction is a peer-tutoring marketplace for university students. Pick your un
 | 3 | $4.50 | +50c | +50c |
 | 5 | $7.50 | +50c | +50c |
 
-Tutors earn $1.10 per answer, or $1.30 early bird. Unfilled answer spots are refunded when the question closes.
+Urgent (answers within 20 minutes): +75c per answer, refunded for any answer that takes longer.
+
+Tutors earn $1.10 per answer, or $1.70 for urgent questions answered within 20 minutes. Unfilled answer spots are refunded when the question closes.
 
 ## Run locally
 
