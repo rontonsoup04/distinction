@@ -40,7 +40,8 @@
     function shown() {
       const q = query.trim().toUpperCase();
       let out = q ? options.filter(o => (o.value + " " + o.label + " " + (o.sub || "")).toUpperCase().includes(q)) : options.slice();
-      if (cfg.freeText && q && cfg.freeText(q) && !options.some(o => o.value === q)) out.push({ value: q, label: q, sub: "Use this course code", custom: true });
+      const raw = query.trim(), fv = cfg.keepCase ? raw : q;
+      if (cfg.freeText && q && cfg.freeText(fv) && !options.some(o => o.value.toUpperCase() === q)) out.push({ value: fv, label: fv, sub: cfg.freeTextLabel || "Use this course code", custom: true });
       return out.slice(0, 300);
     }
     function paint() {

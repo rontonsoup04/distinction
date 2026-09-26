@@ -225,47 +225,65 @@
   }
 
   /* ---------------- profile forms ---------------- */
+  const DEGREES = [
+    "Bachelor of Commerce", "Bachelor of Information Systems", "Bachelor of Computer Science", "Bachelor of Software Engineering", "Bachelor of Engineering (Honours)",
+    "Bachelor of Information Technology", "Bachelor of Data Science", "Bachelor of Science", "Bachelor of Advanced Science", "Bachelor of Mathematics",
+    "Bachelor of Actuarial Studies", "Bachelor of Economics", "Bachelor of Business", "Bachelor of Business Analytics", "Bachelor of Finance", "Bachelor of Accounting",
+    "Bachelor of Marketing", "Bachelor of Management", "Bachelor of Arts", "Bachelor of Media and Communication", "Bachelor of Design", "Bachelor of Architecture",
+    "Bachelor of Laws", "Bachelor of Psychology", "Bachelor of Psychological Science", "Bachelor of Medical Science", "Bachelor of Biomedical Science",
+    "Bachelor of Health Science", "Bachelor of Nursing", "Bachelor of Pharmacy", "Bachelor of Exercise Science", "Bachelor of Physiotherapy", "Doctor of Medicine",
+    "Bachelor of Education", "Bachelor of Social Work", "Bachelor of Music", "Bachelor of Fine Arts", "Bachelor of International Studies", "Bachelor of Politics, Philosophy and Economics",
+    "Bachelor of Commerce / Bachelor of Laws", "Bachelor of Commerce / Bachelor of Information Systems", "Bachelor of Commerce / Bachelor of Computer Science",
+    "Bachelor of Engineering (Honours) / Bachelor of Commerce", "Bachelor of Science / Bachelor of Arts",
+    "Master of Information Technology", "Master of Business Administration", "Master of Professional Accounting", "Master of Data Science", "Master of Commerce",
+    "Master of Engineering", "Master of Finance", "Juris Doctor", "Diploma", "Foundation studies"
+  ];
+  const LANGS = [
+    ["English", "English"], ["Mandarin (Simplified Chinese)", "Mandarin · 简体中文"], ["Cantonese (Traditional Chinese)", "Cantonese · 繁體中文"], ["Hindi", "Hindi · हिन्दी"],
+    ["Vietnamese", "Vietnamese · Tiếng Việt"], ["Korean", "Korean · 한국어"], ["Japanese", "Japanese · 日本語"], ["Indonesian", "Indonesian · Bahasa Indonesia"],
+    ["Arabic", "Arabic · العربية"], ["Spanish", "Spanish · Español"], ["Thai", "Thai · ไทย"], ["Nepali", "Nepali · नेपाली"], ["Urdu", "Urdu · اردو"],
+    ["Punjabi", "Punjabi · ਪੰਜਾਬੀ"], ["Malay", "Malay · Bahasa Melayu"]
+  ];
+  const langValue = v => LANGS.some(l => l[0] === v) ? v : "English";
+  // parts: about (names), studies (uni, degree, year), prefs (language, heard), bio (tutor intro)
   async function profileFields(root, p, opts = {}) {
+    const parts = opts.parts || ["about", "studies", "prefs"];
+    const has = k => parts.includes(k);
     root.innerHTML = `
-      <div class="two">
+      ${has("about") ? `<div class="two">
         <label class="field"><span>Full name</span><input type="text" id="pf-name" value="${esc(p.full_name || "")}" autocomplete="name"></label>
         <label class="field"><span>Display name</span><input type="text" id="pf-display" value="${esc(p.display_name || "")}" placeholder="e.g. Alex C." maxlength="30"><small>This is what ${opts.tutor ? "students" : "tutors"} see.</small></label>
-      </div>
-      <div class="field"><span id="pf-uni-lbl">University</span><div id="pf-uni" data-label="pf-uni-lbl"></div></div>
-      <div class="two">
-        <label class="field"><span>Degree</span><input type="text" id="pf-degree" value="${esc(p.degree || "")}" placeholder="e.g. Bachelor of Information Systems"></label>
-        <div class="field"><span id="pf-year-lbl">Year of study</span><div id="pf-year" data-label="pf-year-lbl"></div></div>
-      </div>
-      ${opts.tutor ? `<label class="field"><span>Short intro for students</span><textarea class="prose" id="pf-bio" maxlength="400" placeholder="What you're good at explaining.">${esc(p.bio || "")}</textarea></label>` : `
-      <div class="field"><span>Courses you're taking this term</span><div id="pf-courses"></div><small>We'll suggest these when you ask a question.</small></div>
-      <div class="two">
-        <div class="field"><span id="pf-lang-lbl">Preferred answer language</span><div id="pf-lang" data-label="pf-lang-lbl"></div></div>
-        <label class="field"><span>How did you hear about us? (optional)</span><input type="text" id="pf-heard" value="${esc(p.heard_from || "")}" maxlength="80"></label>
-      </div>`}`;
-    const uniSel = glassSelect($("#pf-uni", root), { options: uniOpts(), value: p.uni_id || null, placeholder: "Choose your university", search: "Search universities", onChange: async v => { if (chips) { S._sug = courseOpts(await coursesFor(v)); chips.refresh(); } } });
-    const yearSel = glassSelect($("#pf-year", root), { options: YEARS.map(y => ({ value: y, label: y })), value: p.year_of_study || null, placeholder: "Choose" });
-    let chips = null, langSel = null;
-    if (!opts.tutor) {
-      S._sug = courseOpts(await coursesFor(p.uni_id));
-      chips = chipsInput($("#pf-courses", root), { values: p.current_courses || [], suggest: () => S._sug || [], placeholder: "Add a course code, e.g. COMP1511" });
-      langSel = glassSelect($("#pf-lang", root), { options: ["English", "Mandarin", "Cantonese", "Hindi", "Vietnamese", "Korean", "Other"].map(l => ({ value: l, label: l })), value: p.answer_language || "English" });
+      </div>` : ""}
+      ${has("studies") ? `<div class="field"><span id="pf-uni-lbl">University</span><div id="pf-uni" data-label="pf-uni-lbl"></div></div>
+      <div class="field"><span id="pf-degree-lbl">Degree</span><div id="pf-degree" data-label="pf-degree-lbl"></div><small>Can't find yours? Type it in the search box.</small></div>
+      <div class="field"><span id="pf-year-lbl">Year of study</span><div id="pf-year" data-label="pf-year-lbl"></div></div>` : ""}
+      ${has("bio") ? `<label class="field"><span>Short intro for students</span><textarea class="prose" id="pf-bio" maxlength="400" placeholder="What you're good at explaining.">${esc(p.bio || "")}</textarea></label>` : ""}
+      ${has("prefs") ? `<div class="field"><span id="pf-lang-lbl">Preferred language</span><div id="pf-lang" data-label="pf-lang-lbl"></div><small>Questions and answers written in other languages are translated into this one. You can always tap "Show original".</small></div>
+      ${opts.tutor ? "" : `<label class="field"><span>How did you hear about us? (optional)</span><input type="text" id="pf-heard" value="${esc(p.heard_from || "")}" maxlength="80"></label>`}` : ""}`;
+    let uniSel, degSel, yearSel, langSel;
+    if (has("studies")) {
+      uniSel = glassSelect($("#pf-uni", root), { options: uniOpts(), value: p.uni_id || null, placeholder: "Choose your university", search: "Search universities", hideSub: true });
+      const degOpts = DEGREES.map(d => ({ value: d, label: d }));
+      if (p.degree && !DEGREES.includes(p.degree)) degOpts.unshift({ value: p.degree, label: p.degree });
+      degSel = glassSelect($("#pf-degree", root), { options: degOpts, value: p.degree || null, placeholder: "Choose your degree", search: "Search or type your degree", freeText: t => t.length >= 4, keepCase: true, freeTextLabel: "Use this degree", emptyText: "Keep typing to use your own degree name." });
+      yearSel = glassSelect($("#pf-year", root), { options: YEARS.map(y => ({ value: y, label: y })), value: p.year_of_study || null, placeholder: "Choose" });
     }
+    if (has("prefs")) langSel = glassSelect($("#pf-lang", root), { options: LANGS.map(([v, l]) => ({ value: v, label: l })), value: langValue(p.answer_language), search: "Search languages" });
     return () => {
-      const v = {
-        full_name: $("#pf-name", root).value.trim(), display_name: $("#pf-display", root).value.trim(),
-        uni_id: uniSel.value, degree: $("#pf-degree", root).value.trim(), year_of_study: yearSel.value
-      };
-      if (opts.tutor) v.bio = $("#pf-bio", root).value.trim();
-      else { v.current_courses = chips.values; v.answer_language = langSel.value; v.heard_from = $("#pf-heard", root).value.trim(); }
+      const v = {};
+      if (has("about")) { v.full_name = $("#pf-name", root).value.trim(); v.display_name = $("#pf-display", root).value.trim(); }
+      if (has("studies")) { v.uni_id = uniSel.value; v.degree = degSel.value; v.year_of_study = yearSel.value; }
+      if (has("bio")) v.bio = $("#pf-bio", root).value.trim();
+      if (has("prefs")) { v.answer_language = langSel.value; if ($("#pf-heard", root)) v.heard_from = $("#pf-heard", root).value.trim(); }
       return v;
     };
   }
   function checkProfile(v) {
-    if (!v.full_name) return "Enter your full name.";
-    if (!v.display_name) return "Enter a display name, such as your first name and last initial.";
-    if (!v.uni_id) return "Choose your university.";
-    if (!v.degree) return "Enter your degree.";
-    if (!v.year_of_study) return "Choose your year of study.";
+    if ("full_name" in v && !v.full_name) return "Enter your full name.";
+    if ("display_name" in v && !v.display_name) return "Enter a display name, such as your first name and last initial.";
+    if ("uni_id" in v && !v.uni_id) return "Choose your university.";
+    if ("degree" in v && !v.degree) return "Choose your degree.";
+    if ("year_of_study" in v && !v.year_of_study) return "Choose your year of study.";
     return null;
   }
   async function saveProfile(v) {
@@ -274,18 +292,36 @@
     S.profile = data; renderHeader(); return data;
   }
 
+  /* Student sign-up: three short steps, like the tutor application */
   async function pageWelcome() {
     const p = S.profile;
-    app().innerHTML = `<div class="medium"><div class="panel"><div><span class="eyebrow">Welcome</span><h1 style="font-size:30px;margin-top:4px">Tell us about your studies</h1><p class="muted" style="margin-top:6px">This helps us send your questions to the right people.</p></div>
-      <div id="fields" class="col"></div><div id="st" hidden></div>
-      <div class="row" style="justify-content:space-between"><a href="#/tutor/apply">I want to tutor instead</a><button class="btn primary" id="save">Continue</button></div></div></div>`;
-    const read = await profileFields($("#fields"), { ...p, display_name: p.display_name || suggestDisplay(p.full_name) });
-    $("#save").onclick = async () => {
-      const v = read(); const bad = checkProfile(v); if (bad) return status($("#st"), bad, "err");
-      $("#save").disabled = true;
-      try { await saveProfile({ ...v, is_student: true, onboarded: true }); toast("You're all set"); location.hash = "#/ask"; }
-      catch (e) { status($("#st"), errMsg(e), "err"); $("#save").disabled = false; }
-    };
+    const W = { step: 1 };
+    const STEPS = [["About you", ["about"], "What should tutors call you?"], ["Your studies", ["studies"], "This helps us send your questions to the right people."], ["Preferences", ["prefs"], "Choose the language you'd like questions and answers shown in."]];
+    app().innerHTML = `<div class="medium"><div class="col">
+      <div><span class="eyebrow">Student sign-up</span><h1 style="font-size:30px;margin-top:4px">Set up your student account</h1></div>
+      <div class="steps" id="steps"></div><div class="panel" id="body"></div>
+      <p class="muted" style="font-size:14px">Got a D or HD in a course? <a href="#/tutor/apply">Apply to tutor instead</a>.</p></div></div>`;
+    async function render() {
+      $("#steps").innerHTML = STEPS.map((s, i) => `<span class="${i + 1 === W.step ? "on" : i + 1 < W.step ? "done" : ""}">${i + 1}. ${s[0]}</span>`).join("");
+      const [title, parts, sub] = STEPS[W.step - 1];
+      $("#body").innerHTML = `<h2>${title}</h2><p class="muted" style="font-size:14px">${sub}</p><div id="fields" class="col"></div><div id="st" hidden></div>
+        <div class="row" style="justify-content:space-between">${W.step > 1 ? '<button class="btn ghost" id="back">Back</button>' : "<span></span>"}<button class="btn primary" id="next">${W.step === STEPS.length ? "Finish" : "Continue"}</button></div>`;
+      const cur = { ...p, ...S.profile, display_name: S.profile.display_name || suggestDisplay(S.profile.full_name) };
+      const read = await profileFields($("#fields"), cur, { parts });
+      if ($("#back")) $("#back").onclick = () => { W.step--; render(); };
+      $("#next").onclick = async () => {
+        const v = read(); const bad = checkProfile(v); if (bad) return status($("#st"), bad, "err");
+        $("#next").disabled = true;
+        try {
+          const last = W.step === STEPS.length;
+          await saveProfile(last ? { ...v, is_student: true, onboarded: true } : v);
+          if (last) { toast("You're all set. You have $10 of free credits to start."); location.hash = "#/ask"; }
+          else { W.step++; render(); }
+        } catch (e) { status($("#st"), errMsg(e), "err"); $("#next").disabled = false; }
+      };
+      window.scrollTo(0, 0);
+    }
+    render();
   }
   const suggestDisplay = n => { const w = String(n || "").trim().split(/\s+/); return w.length > 1 ? `${w[0]} ${w[w.length - 1][0]}.` : (w[0] || ""); };
 
@@ -293,14 +329,12 @@
     const p = S.profile;
     app().innerHTML = `<div class="medium"><div class="panel"><div><span class="eyebrow">Account</span><h1 style="font-size:30px;margin-top:4px">Profile and settings</h1><p class="muted">${esc(S.user.email)}</p></div>
       <div id="fields" class="col"></div>
-      ${p.tutor_status !== "none" ? `<label class="field"><span>Tutor intro</span><textarea class="prose" id="bio" maxlength="400">${esc(p.bio || "")}</textarea></label>` : ""}
       <div id="st" hidden></div>
       <div class="row" style="justify-content:space-between"><button class="btn ghost" id="out">Sign out</button><button class="btn primary" id="save">Save changes</button></div></div></div>`;
-    const read = await profileFields($("#fields"), p);
+    const read = await profileFields($("#fields"), p, { tutor: p.tutor_status !== "none", parts: p.tutor_status !== "none" ? ["about", "studies", "bio", "prefs"] : ["about", "studies", "prefs"] });
     $("#out").onclick = async () => { await sb.auth.signOut(); location.hash = "#/"; };
     $("#save").onclick = async () => {
       const v = read(); const bad = checkProfile(v); if (bad) return status($("#st"), bad, "err");
-      if ($("#bio")) v.bio = $("#bio").value.trim();
       try { await saveProfile({ ...v, is_student: true, onboarded: true }); status($("#st"), "Saved.", "ok"); } catch (e) { status($("#st"), errMsg(e), "err"); }
     };
   }
@@ -502,14 +536,15 @@
         const course = tc.find(x => x.uni_id === q.uni_id && x.code === q.course_code) || tc[0];
         const rv = (revs || []).find(r => r.answer_id === a.id);
         const c = DocView.count(a.annotations);
-        return `<div class="answer-card${shownAnswer === a.id ? " active" : ""}" data-a="${a.id}">
+        return `<div class="answer-card${shownAnswer === a.id ? " active" : ""}" data-a="${a.id}" data-trg>
           <div class="ans-head"><span class="ord">${["1st", "2nd", "3rd", "4th", "5th"][i]}</span><b>${esc(displayName(t))}</b>${course ? `<span class="grade">${course.mark}<span class="badge ${gcls(course.grade || gradeFor(course.mark))}">${esc(course.grade || gradeFor(course.mark))}</span></span>` : ""}${course && (course.uni_id !== q.uni_id || course.code !== q.course_code) ? `<span class="simchip"><b>${esc(uniShort(course.uni_id))}</b> ${esc(course.code)}</span>` : ""}${t.equals_verified ? '<span class="eq">✓ My eQuals</span>' : ""}<span class="muted">${ago(a.created_at)}</span></div>
-          <div class="bubbles">${(a.bubbles || []).map(b => `<div class="bubble">${esc(b)}</div>`).join("")}</div>
+          <div class="bubbles" data-trslot>${(a.bubbles || []).map(b => `<div class="bubble" data-tr>${esc(b)}</div>`).join("")}</div>
           ${c.strokes || c.notes ? `<button class="btn sm" data-show="${a.id}">${shownAnswer === a.id ? "Hide" : "Show"} markup on your document (${c.notes} note${c.notes === 1 ? "" : "s"}, ${c.strokes} drawing${c.strokes === 1 ? "" : "s"})</button>` : ""}
           ${mine ? (rv ? `<div class="muted" style="font-size:13px">You rated ${stars(rv.stars)}</div>` : `<div class="row" style="justify-content:space-between"><span class="stars-in" role="group" aria-label="Rate this answer">${[1, 2, 3, 4, 5].map(n => `<button data-rate="${a.id}:${a.tutor_id}:${n}" aria-label="${n} star${n > 1 ? "s" : ""}">★</button>`).join("")}</span><button class="linkbtn" data-report="${a.id}">Report</button></div>`) : ""}
         </div>`;
       }).join("") : `<div class="empty">${closed ? "This question closed without answers." : `<span class="spin"></span> Waiting for answers. ${q.urgent ? "Urgent questions usually get answers within 20 minutes." : "Most questions are answered within an hour."}`}</div>`;
       window._answers = answers;
+      autoTranslate($("#answers"));
     }
     $("#answers").addEventListener("click", async e => {
       const sh = e.target.closest("[data-show]");
@@ -547,6 +582,50 @@
     await load();
     every(10000, () => { const el = $("[data-exp]"); if (el) el.textContent = left(el.dataset.exp); if (new Date(q.expires_at) > new Date()) load(); });
     if (mine) settle();
+  }
+
+  /* ---------------- auto translation ---------------- */
+  // Elements with data-tr inside a data-trg group are translated into the viewer's preferred language.
+  const TR = new Map();
+  const TR_ICON = '<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 3h7v1.5H7.4c-.3 1.6-1 3-2 4.1.6.5 1.3.9 2.1 1.2l-.5 1.4c-1-.4-1.9-.9-2.6-1.6-.8.7-1.8 1.2-2.9 1.6l-.5-1.4c.9-.3 1.7-.7 2.4-1.3-.6-.8-1.1-1.7-1.4-2.7h1.6c.2.6.5 1.2.9 1.7.6-.8 1.1-1.8 1.3-3H2V3zm9.3 3h1.5l3 8h-1.6l-.7-2h-3l-.7 2H8.3l3-8zm-.3 4.6h2l-1-2.9-1 2.9z"/></svg>';
+  async function autoTranslate(root) {
+    if (!root || !S.profile) return;
+    const lang = langValue(S.profile.answer_language);
+    const items = [];
+    root.querySelectorAll("[data-trg]:not([data-trdone])").forEach(g => {
+      g.dataset.trdone = "1";
+      g.querySelectorAll("[data-tr]").forEach(el => {
+        const orig = el.textContent;
+        if (!orig.trim()) return;
+        if (lang === "English" && !/[^\x00-\x7F\u2000-\u206F\u20A0-\u20CF]/.test(orig)) return; // plain English text: skip
+        items.push({ el, g, orig });
+      });
+    });
+    if (!items.length) return;
+    const need = [...new Set(items.map(i => i.orig).filter(t => !TR.has(lang + "\u0000" + t)))];
+    for (let i = 0; i < need.length; i += 20) {
+      const batch = need.slice(i, i + 20);
+      try {
+        const { data, error } = await sb.functions.invoke("translate", { body: { texts: batch, target: lang } });
+        if (error || !data || !data.results) break;
+        batch.forEach((t, k) => TR.set(lang + "\u0000" + t, data.results[k]));
+      } catch (e) { break; }
+    }
+    const groups = new Map();
+    items.forEach(({ el, g, orig }) => {
+      const r = TR.get(lang + "\u0000" + orig);
+      if (!r || r.same || !r.translated) return;
+      el.dataset.orig = orig; el.dataset.trans = r.translated; el.textContent = r.translated;
+      groups.set(g, r.detected || "another language");
+    });
+    groups.forEach((from, g) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "tr-toggle";
+      const label = shown => `${TR_ICON}<span>${shown ? `Translated from ${esc(from)} · Show original` : "Show translation"}</span>`;
+      b.innerHTML = label(true); let translated = true;
+      b.onclick = e => { e.preventDefault(); translated = !translated; g.querySelectorAll("[data-tr][data-orig]").forEach(el => el.textContent = translated ? el.dataset.trans : el.dataset.orig); b.innerHTML = label(translated); };
+      (g.querySelector("[data-trslot]") || g).append(b);
+    });
   }
 
   /* ---------------- credits ---------------- */
@@ -667,6 +746,7 @@
     const rank = q => (q.my_position != null ? 3 : 0) + (q.answer_count >= q.slots ? 2 : 0) + (q.urgent && new Date(q.created_at).getTime() + URGENT_MIN * 60e3 > now ? 0 : 1);
     data.sort((a, b) => rank(a) - rank(b) || new Date(b.created_at) - new Date(a.created_at));
     el.innerHTML = data.length ? data.map(q => feedCard(q, holding)).join("") : `<div class="empty">No open questions in your courses right now. New ones show up here automatically.</div>`;
+    autoTranslate(el);
   }
   function feedCard(q, holding) {
     const now = Date.now(), ebEnd = new Date(q.created_at).getTime() + URGENT_MIN * 60e3;
@@ -682,12 +762,12 @@
     else if (full) action = `<div class="muted" style="font-size:13px">All ${q.slots} spots have been answered.</div>`;
     else if (spots <= 0) action = `<div class="muted" style="font-size:13px">All remaining spots are held by other tutors. Check back in a few minutes.</div>`;
     else action = `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">${holding ? `Finish or release your <span class="mono">${esc(holding.course_code)}</span> question to claim this one` : `${spots} of ${q.slots} spot${q.slots > 1 ? "s" : ""} left`}</span><button class="btn primary sm" data-claim="${q.id}" ${holding ? "disabled" : ""}>Claim to answer</button></div>`;
-    return `<article class="q tq${answered || full ? " done" : ""}">
+    return `<article class="q tq${answered || full ? " done" : ""}" data-trg>
       <div class="tq-head"><div class="avatar sm" aria-hidden="true">${esc(initials(q.asker_name))}</div>
         <div style="min-width:0;flex:1"><b>${esc(q.asker_name)}</b><div class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</div></div>
         <div class="reward-box${eb ? " eb" : ""}">${eb ? `<span class="eb-tag">Urgent</span><b>${money(URGENT_PAY)}</b><small>${mins(ebEnd - now)} min left, then ${money(PAY)}</small>` : `<b>${money(PAY)}</b><small>Reward</small>`}</div></div>
       <div class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="muted" style="font-size:13px">${esc(q.course_title)}</span>${similar ? `<span class="simchip">Similar to your ${esc(q.match_code)}</span>` : ""}${q.min_mark >= 85 ? '<span class="tagchip">HD only</span>' : ""}${q.verified_only ? '<span class="tagchip">Verified only</span>' : ""}</div>
-      <p class="q-text">${esc(q.body)}</p>
+      <div data-trslot><p class="q-text" data-tr>${esc(q.body)}</p></div>
       ${q.attachment_name ? `<span class="fchip">${q.attachment_type === "application/pdf" ? "PDF" : "IMG"} · ${esc(q.attachment_name)} · ${kb(q.attachment_size || 0)}</span>` : ""}
       ${action}
     </article>`;
@@ -718,7 +798,7 @@
             <div class="tq-head"><div class="avatar sm" aria-hidden="true">${esc(initials(q.asker_name))}</div><div style="flex:1;min-width:0"><b>${esc(q.asker_name)}</b><div class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</div></div>
               <div class="reward-box${eb() ? " eb" : ""}" id="reward"></div></div>
             <div class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="muted" style="font-size:13px">${esc(q.course_title)}</span></div>
-            <p class="q-text" style="font-size:16px">${esc(q.body)}</p>
+            <div data-trslot><p class="q-text" style="font-size:16px" data-tr>${esc(q.body)}</p></div>
           </article>
           <div class="panel" style="gap:12px">
             <div class="row" style="justify-content:space-between"><h3 style="font-size:18px">Your answer</h3><span class="muted" style="font-size:13px" id="claim-state"></span></div>
@@ -742,6 +822,7 @@
       el.textContent = claimUntil && claimUntil > new Date() ? `Held for you · ${mins(claimUntil - Date.now())} min left` : "Hold expired. Submitting will still work if a spot is free.";
       $("#reward").innerHTML = eb() ? `<span class="eb-tag">Urgent</span><b>${money(URGENT_PAY)}</b><small>${mins(new Date(q.created_at).getTime() + URGENT_MIN * 60e3 - Date.now())} min left, then ${money(PAY)}</small>` : `<b>${money(PAY)}</b><small>Reward</small>`;
     }
+    const qa = app().querySelector("article.q"); if (qa) { qa.setAttribute("data-trg", ""); autoTranslate(app()); }
     await ensureClaim(); paintClaim();
     every(15000, paintClaim);
 
@@ -802,7 +883,7 @@
 
     async function step1() {
       $("#body").innerHTML = `<h2>Your profile</h2><p class="muted" style="font-size:14px">Students see your display name, uni, degree and intro.</p><div id="fields" class="col"></div><div id="st" hidden></div><div class="row" style="justify-content:flex-end"><button class="btn primary" id="next">Continue</button></div>`;
-      readProfile = await profileFields($("#fields"), { ...p, display_name: p.display_name || suggestDisplay(p.full_name) }, { tutor: true });
+      readProfile = await profileFields($("#fields"), { ...p, ...S.profile, display_name: S.profile.display_name || suggestDisplay(S.profile.full_name) }, { tutor: true, parts: ["about", "studies", "bio", "prefs"] });
       $("#next").onclick = async () => {
         const v = readProfile(); const bad = checkProfile(v); if (bad) return status($("#st"), bad, "err");
         try { await saveProfile({ ...v, is_student: true, onboarded: true }); A.step = 2; render(); } catch (e) { status($("#st"), errMsg(e), "err"); }
