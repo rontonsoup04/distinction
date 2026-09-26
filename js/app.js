@@ -381,7 +381,7 @@
           </div>
           <div class="field"><span>Who can answer</span>
             <div class="seg" role="radiogroup" aria-label="Minimum grade"><label><input type="radio" name="a-grade" value="75" checked><span>Distinction and HD</span></label><label><input type="radio" name="a-grade" value="85"><span>HD only</span></label></div>
-            <p class="speed-note" id="a-grade-note">Tutors who got a D or HD in this course, or a similar course at any uni, can see and claim it.</p>
+            <p class="speed-note stack-note" id="a-grade-note">${[0, 1, 2, 3].map(i => `<span data-v="${i}"${i ? " hidden-note" : ""}></span>`).join("")}</p>
           </div>
           <fieldset class="field goals"><legend>What are you after? <small class="muted">Tick any</small></legend>
             <div class="goal-grid">${GOALS.map(g => `<label class="goal"><input type="checkbox" name="a-goal" value="${g.v}"><span><b>${g.label}</b><small>${g.hint}</small></span></label>`).join("")}</div>
@@ -425,12 +425,15 @@
     const goalsPicked = () => [...document.querySelectorAll('input[name="a-goal"]:checked')].map(el => el.value);
     function paintReach() {
       const hd = +document.querySelector('input[name="a-grade"]:checked').value >= 85, uniOnly = goalsPicked().includes("course_specific");
-      const who = hd ? "Only tutors who got an HD (85+)" : "Tutors who got a D or HD";
-      const where = uniOnly ? `in this course at ${uniShort(uniSel2.value) || "your uni"}, or a very close course there` : "in this course, or a similar course at any uni";
-      $("#a-grade-note").textContent = `${who} ${where}, can see and claim it.${hd || uniOnly ? " Fewer tutors, so answers may take a little longer." : ""}`;
+      // every variant is laid out in the same spot, so the tallest one sets the height and nothing below moves
+      const uni = uniShort(uniSel2.value) || "your uni";
+      const variants = [[false, false], [true, false], [false, true], [true, true]].map(([h, u]) =>
+        `${h ? "Only tutors who got an HD (85+)" : "Tutors who got a D or HD"} ${u ? `in this course at ${uni}, or a very close course there` : "in this course, or a similar course at any uni"}, can see and claim it.${h || u ? " Fewer tutors, so answers may take a little longer." : ""}`);
+      const cur = (hd ? 1 : 0) + (uniOnly ? 2 : 0);
+      $$("#a-grade-note span").forEach((el, i) => { el.textContent = variants[i]; el.toggleAttribute("hidden-note", i !== cur); });
     }
     document.querySelectorAll('input[name="a-grade"], input[name="a-goal"]').forEach(el => el.addEventListener("change", paintReach));
-    paintCost();
+    paintCost(); paintReach();
     await loadCourses(p.uni_id);
     const durSel = glassSelect($("#a-dur"), { options: DURS, value: "24" });
 

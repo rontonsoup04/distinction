@@ -514,8 +514,12 @@ fieldset.goals legend small{font-weight:400;margin-left:4px}
 .goal small{font-size:11.5px;color:var(--muted);line-height:1.3}
 .goal:hover span{border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
 .goal input:checked+span{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--surface))}
-.goal input:checked+span b::before{content:"\2713  ";color:var(--accent)}
+.goal span{padding-right:22px}
+.goal input:checked+span::after{content:"\2713";position:absolute;top:7px;right:9px;font-size:12px;font-weight:700;color:var(--accent)}
 .goal input:focus-visible+span{outline:2px solid var(--accent);outline-offset:1px}
 .goals-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px}
 .goalchip{font-size:12px;font-weight:500;border-radius:999px;padding:2px 9px;background:color-mix(in srgb,var(--accent) 12%,var(--surface));color:var(--accent)}
 .goalchip.uni{background:var(--surface-2);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.stack-note{display:grid}
+.stack-note>span{grid-area:1/1}
+.stack-note>span[hidden-note]{visibility:hidden}
