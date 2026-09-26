@@ -52,7 +52,7 @@
     const p = S.profile, signedIn = !!S.user;
     const route = location.hash.split("/")[1] || "";
     const links = signedIn && p && p.onboarded ? [
-      ["ask", "Ask a question"], ["questions", "My questions"], ["tutor", "Tutor"], ["credits", "Credits"],
+      ["ask", "Ask a question"], ["questions", "My questions"], ["tutor", p.tutor_status === "approved" ? "Tutor" : "Become a tutor"], ["credits", "Credits"],
       ...(p.is_admin ? [["admin", "Admin"]] : [])
     ] : [];
     $("#nav").innerHTML = links.map(([r, l]) => `<a href="#/${r}" class="navlink" ${route === r || (r === "tutor" && route === "answer") ? 'aria-current="page"' : ""}>${l}</a>`).join("");
@@ -85,14 +85,12 @@
     window.scrollTo(0, 0);
     if (!S.user && !PUBLIC.includes(r)) { sessionStorage.setItem("after-login", location.hash); location.hash = "#/login"; return; }
     if (S.user && ["login", "signup"].includes(r)) { location.hash = "#/"; return; }
-    if (S.user && S.profile && !S.profile.onboarded && !["welcome", "tutor", "new-password", "profile"].includes(r) && !(r === "tutor" && parts[1] === "apply")) {
-      location.hash = S.profile.intended_role === "tutor" ? "#/tutor/apply" : "#/welcome"; return;
-    }
+    if (S.user && S.profile && !S.profile.onboarded && !["welcome", "new-password"].includes(r)) { location.hash = "#/welcome"; return; }
     try {
       switch (r) {
         case "": return S.user ? (location.hash = "#/ask") : pageHome();
         case "login": return pageLogin();
-        case "signup": return pageSignup(parts[1]);
+        case "signup": return pageSignup();
         case "reset": return pageReset();
         case "new-password": return pageNewPassword();
         case "welcome": return pageWelcome();
@@ -119,7 +117,7 @@
           <h1>Ask about any course. Students with an <em>HD</em> answer.</h1>
           <p class="fast"><span class="pulse" aria-hidden="true"></span>Receive an answer in a couple of minutes</p>
           <p class="muted" style="max-width:52ch;margin-top:12px">Pick your uni and course, ask a short question, and it goes to students who got a Distinction or High Distinction in that exact course, and in similar courses at other unis. Standard questions are usually answered within an hour. Urgent ones within 20 minutes.</p>
-          <div class="cta-row"><a class="btn primary" href="#/signup/student">Sign up to ask</a><a class="btn" href="#/signup/tutor">Become a tutor</a><a class="btn ghost" href="#/login">Log in</a></div>
+          <div class="cta-row"><a class="btn primary" href="#/signup">Sign up to ask</a><a class="btn" href="#/signup">Sign up to tutor</a><a class="btn ghost" href="#/login">Log in</a></div>
         </div>
         <div class="q demo-q" aria-hidden="true">
           <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">INFS2608</span><span class="q-time">UNSW · 2 min ago</span></span><span class="q-exp live">Urgent</span></div>
@@ -129,8 +127,8 @@
         </div>
       </div>
       <div class="two-up">
-        <div class="panel feature"><span class="eyebrow">For students</span><h2>Answers from people who aced your course</h2><ul><li>Pick your uni and course from 40 Australian universities</li><li>50-word questions with one PDF or image</li><li>Every tutor with a D or HD in your course, or a similar one, can see and claim it</li><li>Get 2, 3 or 5 answers. Rate each one.</li></ul><a class="btn primary" href="#/signup/student" style="align-self:flex-start">Sign up as a student</a></div>
-        <div class="panel feature"><span class="eyebrow">For tutors</span><h2>Earn up to $34 an hour from your phone</h2><ul><li>Upload your transcript. We read it and approve your D and HD courses. Add My eQuals for a verified checkmark.</li><li>Claim a question, then answer with text and by drawing on the student's document</li><li>$1.10 per answer, $1.70 for urgent questions answered within 20 minutes</li></ul><a class="btn" href="#/signup/tutor" style="align-self:flex-start">Apply to tutor</a></div>
+        <div class="panel feature"><span class="eyebrow">For students</span><h2>Answers from people who aced your course</h2><ul><li>Pick your uni and course from 40 Australian universities</li><li>50-word questions with one PDF or image</li><li>Every tutor with a D or HD in your course, or a similar one, can see and claim it</li><li>Get 2, 3 or 5 answers. Rate each one.</li></ul><a class="btn primary" href="#/signup" style="align-self:flex-start">Sign up as a student</a></div>
+        <div class="panel feature"><span class="eyebrow">For tutors</span><h2>Earn up to $34 an hour from your phone</h2><ul><li>Upload your transcript. We read it and approve your D and HD courses. Add My eQuals for a verified checkmark.</li><li>Claim a question, then answer with text and by drawing on the student's document</li><li>$1.10 per answer, $1.70 for urgent questions answered within 20 minutes</li></ul><p class="muted" style="font-size:13px">Create a free account first, then apply to tutor from your account.</p><a class="btn" href="#/signup" style="align-self:flex-start">Create an account</a></div>
       </div>
     </section>`;
   }
@@ -138,7 +136,6 @@
   /* ---------------- auth ---------------- */
   const GOOGLE_SVG = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
   async function google(role) {
-    if (role) localStorage.setItem("intended-role", role);
     const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + "/" } });
     if (error) toast(/provider is not enabled|Unsupported provider/i.test(error.message) ? "Google sign-in isn't switched on yet. Use email and password for now." : errMsg(error), 5000);
   }
@@ -164,14 +161,10 @@
       if (error) return status($("#st"), /Email not confirmed/i.test(error.message) ? "Confirm your email first. Check your inbox for the link we sent." : /Invalid login/i.test(error.message) ? "That email and password don't match. Try again or reset your password." : errMsg(error), "err");
     };
   }
-  function pageSignup(role) {
-    role = role === "tutor" ? "tutor" : "student";
+  function pageSignup() {
     app().innerHTML = `<div class="narrow"><form class="panel auth-card" id="f" novalidate>
       <h1>Create your account</h1>
-      <div class="role-pick" role="radiogroup" aria-label="I want to">
-        <label><input type="radio" name="role" value="student" ${role === "student" ? "checked" : ""}><span class="role"><b>Ask questions</b><small>Student account</small></span></label>
-        <label><input type="radio" name="role" value="tutor" ${role === "tutor" ? "checked" : ""}><span class="role"><b>Answer and earn</b><small>Tutor account, needs a transcript check</small></span></label>
-      </div>
+      <p class="muted" style="font-size:14px">Every account starts as a student account with $10 of free credits. Once you're set up, you can apply to tutor the courses you aced.</p>
       <button type="button" class="btn block google" id="g">${GOOGLE_SVG}Sign up with Google</button>
       <div class="divider">or</div>
       <label class="field"><span>Full name</span><input type="text" id="name" autocomplete="name" required></label>
@@ -181,8 +174,7 @@
       <button class="btn primary block" id="go">Create account</button>
       <div class="row" style="justify-content:center"><span class="muted">Already have an account?</span><a href="#/login">Log in</a></div>
     </form></div>`;
-    const roleVal = () => document.querySelector('input[name="role"]:checked').value;
-    $("#g").onclick = () => google(roleVal());
+    $("#g").onclick = () => google();
     $("#f").onsubmit = async e => {
       e.preventDefault();
       const full_name = $("#name").value.trim(), email = $("#email").value.trim(), password = $("#pw").value;
@@ -190,7 +182,7 @@
       if (!/^\S+@\S+\.\S+$/.test(email)) return status($("#st"), "Enter a valid email address.", "err");
       if (password.length < 8) return status($("#st"), "Use a password of at least 8 characters.", "err");
       $("#go").disabled = true; status($("#st"), "Creating your account…", "", true);
-      const { data, error } = await sb.auth.signUp({ email, password, options: { data: { full_name, intended_role: roleVal() }, emailRedirectTo: location.origin + "/" } });
+      const { data, error } = await sb.auth.signUp({ email, password, options: { data: { full_name }, emailRedirectTo: location.origin + "/" } });
       $("#go").disabled = false;
       if (error) return status($("#st"), /already registered/i.test(error.message) ? "There's already an account with that email. Log in instead." : errMsg(error), "err");
       if (!data.session) {
@@ -300,7 +292,7 @@
     app().innerHTML = `<div class="medium"><div class="col">
       <div><span class="eyebrow">Student sign-up</span><h1 style="font-size:30px;margin-top:4px">Set up your student account</h1></div>
       <div class="steps" id="steps"></div><div class="panel" id="body"></div>
-      <p class="muted" style="font-size:14px">Got a D or HD in a course? <a href="#/tutor/apply">Apply to tutor instead</a>.</p></div></div>`;
+      </div></div>`;
     async function render() {
       $("#steps").innerHTML = STEPS.map((s, i) => `<span class="${i + 1 === W.step ? "on" : i + 1 < W.step ? "done" : ""}">${i + 1}. ${s[0]}</span>`).join("");
       const [title, parts, sub] = STEPS[W.step - 1];
@@ -315,10 +307,21 @@
         try {
           const last = W.step === STEPS.length;
           await saveProfile(last ? { ...v, is_student: true, onboarded: true } : v);
-          if (last) { toast("You're all set. You have $10 of free credits to start."); location.hash = "#/ask"; }
+          if (last) { return finished(); }
           else { W.step++; render(); }
         } catch (e) { status($("#st"), errMsg(e), "err"); $("#next").disabled = false; }
       };
+      window.scrollTo(0, 0);
+    }
+    function finished() {
+      $("#steps").innerHTML = STEPS.map((s, i) => `<span class="done">${i + 1}. ${s[0]}</span>`).join("");
+      $("#body").innerHTML = `<div class="pending-card"><span class="status-pill approved">Account ready</span>
+        <h2 style="font-size:26px">You're all set, ${esc(displayName(S.profile))}</h2>
+        <p class="muted">You have <b style="color:var(--ink)">$10 of free credits</b> to ask your first questions.</p>
+        <a class="btn primary" href="#/ask">Ask a question</a></div>`;
+      $("#body").insertAdjacentHTML("afterend", `<div class="panel" style="gap:10px"><span class="eyebrow">Optional</span><h2 style="font-size:22px">Got a D or HD in a course? Earn by tutoring it.</h2>
+        <p class="muted" style="font-size:14px">Answer short questions from students in the courses you aced. $1.10 per answer, or $1.70 for urgent ones answered within 20 minutes. Upload your transcript to apply. It takes about 3 minutes.</p>
+        <div class="row"><a class="btn" href="#/tutor/apply">Apply to tutor</a><a class="btn ghost" href="#/ask">Maybe later</a></div></div>`);
       window.scrollTo(0, 0);
     }
     render();
@@ -877,16 +880,21 @@
     app().innerHTML = `<div class="medium"><div class="col">
       <div><span class="eyebrow">Tutor application</span><h1 style="font-size:30px;margin-top:4px">Become a Distinction tutor</h1></div>
       <div class="steps" id="steps"></div><div class="panel" id="body"></div></div></div>`;
-    const STEPS = ["Profile", "Transcript", "Verification", "Submit"];
+    const STEPS = ["Tutor profile", "Transcript", "Verification", "Submit"];
     const paintSteps = () => $("#steps").innerHTML = STEPS.map((s, i) => `<span class="${i + 1 === A.step ? "on" : i + 1 < A.step ? "done" : ""}">${i + 1}. ${s}</span>`).join("");
     let readProfile = null;
 
     async function step1() {
-      $("#body").innerHTML = `<h2>Your profile</h2><p class="muted" style="font-size:14px">Students see your display name, uni, degree and intro.</p><div id="fields" class="col"></div><div id="st" hidden></div><div class="row" style="justify-content:flex-end"><button class="btn primary" id="next">Continue</button></div>`;
-      readProfile = await profileFields($("#fields"), { ...p, ...S.profile, display_name: S.profile.display_name || suggestDisplay(S.profile.full_name) }, { tutor: true, parts: ["about", "studies", "bio", "prefs"] });
+      const pr = S.profile;
+      $("#body").innerHTML = `<h2>Your tutor profile</h2>
+        <p class="muted" style="font-size:14px">Students see your display name, uni, degree and this intro. You can change your details anytime in <a href="#/profile">Profile and settings</a>.</p>
+        <dl class="kv"><dt>Display name</dt><dd>${esc(pr.display_name || "")}</dd><dt>University</dt><dd>${esc(uniName(pr.uni_id))}</dd><dt>Degree</dt><dd>${esc(pr.degree || "")}</dd></dl>
+        <div id="fields" class="col"></div><div id="st" hidden></div><div class="row" style="justify-content:flex-end"><button class="btn primary" id="next">Continue</button></div>`;
+      readProfile = await profileFields($("#fields"), pr, { tutor: true, parts: ["bio"] });
       $("#next").onclick = async () => {
-        const v = readProfile(); const bad = checkProfile(v); if (bad) return status($("#st"), bad, "err");
-        try { await saveProfile({ ...v, is_student: true, onboarded: true }); A.step = 2; render(); } catch (e) { status($("#st"), errMsg(e), "err"); }
+        const v = readProfile();
+        if (!v.bio || v.bio.length < 20) return status($("#st"), "Write a short intro of at least 20 characters, like what you're good at explaining.", "err");
+        try { await saveProfile(v); A.step = A.path ? 3 : 2; render(); } catch (e) { status($("#st"), errMsg(e), "err"); }
       };
     }
     function step2() {
@@ -982,13 +990,11 @@
       };
     }
     function render() { paintSteps(); ({ 1: step1, 2: step2, 3: step3, 4: step4 })[A.step](); window.scrollTo(0, 0); }
-    if (p.onboarded && p.uni_id && p.degree) A.step = 2;
     // Resume: reuse the most recent scanned transcript so tutors can come back once their My eQuals link arrives
     const { data: last } = await sb.from("transcript_scans").select("path, courses, created_at").eq("user_id", S.user.id).order("created_at", { ascending: false }).limit(1);
     if (last && last[0] && Date.now() - new Date(last[0].created_at) < 60 * 864e5) {
       A.path = last[0].path; A.courses = (last[0].courses || []).sort((a, b) => b.mark - a.mark);
       A.file = { name: last[0].path.split("/").pop().replace(/^\d+-/, "") };
-      if (A.step === 2) A.step = 3;
     }
     render();
   }
@@ -1107,9 +1113,7 @@
     S.session = session; S.user = session ? session.user : null;
     await loadProfile();
     // Google sign-ups: carry the role picked before redirect
-    const ir = localStorage.getItem("intended-role");
-    if (S.profile && ir && !S.profile.onboarded && !S.profile.intended_role) { await sb.from("profiles").update({ intended_role: ir }).eq("id", S.user.id); S.profile.intended_role = ir; }
-    if (S.user) localStorage.removeItem("intended-role");
+    localStorage.removeItem("intended-role");
     if (/access_token|error_description|type=recovery/.test(location.hash)) history.replaceState(null, "", location.pathname + "#/");
     S.ready = true;
     const after = sessionStorage.getItem("after-login");
