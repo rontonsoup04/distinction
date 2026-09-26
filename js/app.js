@@ -765,12 +765,21 @@
         if (!FILE_TYPES.includes(f.type)) return status($("#st"), "Upload a PDF or an image (PNG, JPG or WebP).", "err");
         if (f.size > 10 * 1024 * 1024) return status($("#st"), "That file is over 10 MB.", "err");
         A.file = f; A.path = null; drop.querySelector("strong").textContent = f.name;
-        if (f.type === "application/pdf") {
-          status($("#st"), "Reading your transcript…", "", true);
-          try { const text = await pdfText(f); const found = parseTranscript(text); if (found.length) { A.courses = found; status($("#st"), `Found ${found.length} courses. Check the marks below and fix anything that's wrong.`, "ok"); } else status($("#st"), "We couldn't read courses from this file. Add them below.", "err"); }
-          catch (e) { status($("#st"), "We couldn't read this PDF automatically. Add your courses below.", "err"); }
-        } else status($("#st"), "Add your courses and marks below. We'll check them against your screenshot.", "ok");
-        if (!A.courses.length) A.courses = [{ code: "", title: "", mark: "", grade: "" }];
+        status($("#st"), "Uploading your transcript…", "", true);
+        const path = `${S.user.id}/${Date.now()}-${f.name.replace(/[^\w.\-]+/g, "_").slice(-80)}`;
+        const up = await sb.storage.from("transcripts").upload(path, f, { contentType: f.type });
+        if (up.error) { A.file = null; return status($("#st"), errMsg(up.error), "err"); }
+        A.path = path;
+        status($("#st"), "Reading your courses and marks. This takes about 10 to 20 seconds…", "", true);
+        let found = [];
+        try {
+          const { data, error } = await sb.functions.invoke("scan-transcript", { body: { path } });
+          if (!error && data && Array.isArray(data.courses)) found = data.courses.map(c => ({ code: c.code, title: c.title, mark: c.mark, grade: c.grade || gradeFor(c.mark) }));
+        } catch (e) { /* fall back below */ }
+        if (!found.length && f.type === "application/pdf") { try { found = parseTranscript(await pdfText(f)); } catch (e) { } }
+        found.sort((a, b) => b.mark - a.mark);
+        if (found.length) { A.courses = found; status($("#st"), `Found ${found.length} courses. Check the marks below and fix anything that's wrong.`, "ok"); }
+        else { A.courses = [{ code: "", title: "", mark: "", grade: "" }]; status($("#st"), "We couldn't read courses from this file. Add them below and we'll check them against your transcript.", "err"); }
         table();
       }
       function table() {
@@ -840,10 +849,19 @@
     let out = "";
     for (let n = 1; n <= Math.min(doc.numPages, 10); n++) {
       const page = await doc.getPage(n); const tc = await page.getTextContent();
-      let lastY = null; for (const it of tc.items) { const y = it.transform[5]; out += (lastY !== null && Math.abs(y - lastY) > 3 ? "\n" : " ") + it.str; lastY = y; }
-      out += "\n";
+      // rebuild rows: group text pieces by vertical position, then read left to right
+      const rows = [];
+      for (const it of tc.items) {
+        if (!it.str || !it.str.trim()) continue;
+        const y = it.transform[5], x = it.transform[4];
+        let row = rows.find(r => Math.abs(r.y - y) < 3);
+        if (!row) rows.push(row = { y, items: [] });
+        row.items.push({ x, s: it.str });
+      }
+      rows.sort((a, b) => b.y - a.y);
+      out += rows.map(r => r.items.sort((a, b) => a.x - b.x).map(i => i.s).join(" ")).join("\n") + "\n";
     }
-    return out;
+    return out.replace(/\b([A-Z]{4})\s(\d{4})\b/g, "$1$2");
   }
   function parseTranscript(text) {
     const out = [], seen = new Set();
