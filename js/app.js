@@ -354,7 +354,7 @@
           <p>Your question goes to every student who got a Distinction or High Distinction in that course, or a similar course at your uni or another. Standard questions are usually answered within an hour. Tick Urgent for answers within 20 minutes.</p>
           <div class="how" style="margin-top:22px">
             <div><span class="stepno">1 · PICK</span><b>Uni and course</b><p>Choose your uni and course, write up to 50 words and attach one file.</p></div>
-            <div><span class="stepno">2 · SHARE</span><b>Who answers</b><p>Everyone who got a D or HD in that course, or a similar course at any uni, can see and claim it.</p></div>
+            <div><span class="stepno">2 · CHOOSE</span><b>Who answers</b><p>Everyone who got a D or HD in that course or a similar one, or HD only if you prefer.</p></div>
             <div><span class="stepno">3 · GET</span><b>Answers</b><p>Tutors reply in short messages and can mark up your PDF or image directly.</p></div>
           </div>
           <a class="recruit" href="#/tutor"><span><b>Got an HD?</b> Earn up to $34 an hour answering quick questions in the courses you aced.</span><span class="recruit-go">Start earning →</span></a>
@@ -364,7 +364,10 @@
             <div class="field"><span id="a-uni-lbl">University</span><div id="a-uni" data-label="a-uni-lbl"></div></div>
             <div class="field"><span id="a-course-lbl">Course</span><div class="pop-right" id="a-course" data-label="a-course-lbl"></div></div>
           </div>
-          <p class="speed-note">Every approved tutor who got a Distinction or HD in this course, or a similar course at any uni, can see and claim your question.</p>
+          <div class="field"><span>Who can answer</span>
+            <div class="seg" role="radiogroup" aria-label="Minimum grade"><label><input type="radio" name="a-grade" value="75" checked><span>Distinction and HD</span></label><label><input type="radio" name="a-grade" value="85"><span>HD only</span></label></div>
+            <p class="speed-note" id="a-grade-note">Tutors who got a D or HD in this course, or a similar course at any uni, can see and claim it.</p>
+          </div>
           <div class="field">
             <div class="row" style="justify-content:space-between"><label for="a-text" style="font-size:13px;font-weight:500">Your question</label><span class="words" id="a-words">0 / ${WORD_LIMIT} words</span></div>
             <textarea class="prose" id="a-text" style="min-height:76px" placeholder="Keep it short: what you're stuck on and which week or assignment it's from."></textarea>
@@ -401,6 +404,11 @@
       $("#a-cost").innerHTML = `<small>${n} answers${urgent ? " + urgent" : ""}</small><b class="mono">${money(priceFor(n, urgent))}</b>`;
     }
     document.querySelectorAll('input[name="a-count"], #a-urgent').forEach(el => el.addEventListener("change", paintCost));
+    document.querySelectorAll('input[name="a-grade"]').forEach(el => el.addEventListener("change", () => {
+      $("#a-grade-note").textContent = +document.querySelector('input[name="a-grade"]:checked').value >= 85
+        ? "Only tutors who got an HD (85+) in this course, or a similar course at any uni, can see and claim it. Fewer tutors, so answers may take a little longer."
+        : "Tutors who got a D or HD in this course, or a similar course at any uni, can see and claim it.";
+    }));
     paintCost();
     await loadCourses(p.uni_id);
     const durSel = glassSelect($("#a-dur"), { options: DURS, value: "24" });
@@ -442,7 +450,7 @@
         const hours = +durSel.value;
         const row = {
           asker_id: S.user.id, uni_id: uni, course_code: code, body: text, ...att,
-          min_mark: 75, verified_only: false, wide: true, urgent: $("#a-urgent").checked,
+          min_mark: +document.querySelector('input[name="a-grade"]:checked').value, verified_only: false, wide: true, urgent: $("#a-urgent").checked,
           slots: +document.querySelector('input[name="a-count"]:checked').value,
           expires_at: new Date(Date.now() + hours * 3600e3).toISOString()
         };
@@ -501,7 +509,7 @@
           <article class="q">
             <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</span></span><span class="q-exp" data-exp="${q.expires_at}">${left(q.expires_at)}</span></div>
             <p class="q-text" style="font-size:17px">${esc(q.body)}</p>
-            <div class="q-pay">${[q.urgent ? "Urgent" : null, "Open to D and HD tutors", "Similar courses included"].filter(Boolean).map(t => `<span class="tagchip">${t}</span>`).join("")}</div>
+            <div class="q-pay">${[q.urgent ? "Urgent" : null, q.min_mark >= 85 ? "HD only" : "Open to D and HD tutors", "Similar courses included"].filter(Boolean).map(t => `<span class="tagchip">${t}</span>`).join("")}</div>
           </article>
           ${q.attachment_path ? `<div class="answer-tabs" id="ann-tabs"></div><div id="doc"></div>` : ""}
         </div>
