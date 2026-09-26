@@ -844,6 +844,13 @@
     }
     function render() { paintSteps(); ({ 1: step1, 2: step2, 3: step3, 4: step4 })[A.step](); window.scrollTo(0, 0); }
     if (p.onboarded && p.uni_id && p.degree) A.step = 2;
+    // Resume: reuse the most recent scanned transcript so tutors can come back once their My eQuals link arrives
+    const { data: last } = await sb.from("transcript_scans").select("path, courses, created_at").eq("user_id", S.user.id).order("created_at", { ascending: false }).limit(1);
+    if (last && last[0] && Date.now() - new Date(last[0].created_at) < 60 * 864e5) {
+      A.path = last[0].path; A.courses = (last[0].courses || []).sort((a, b) => b.mark - a.mark);
+      A.file = { name: last[0].path.split("/").pop().replace(/^\d+-/, "") };
+      if (A.step === 2) A.step = 3;
+    }
     render();
   }
 
