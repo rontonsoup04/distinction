@@ -464,7 +464,7 @@
           <article class="q">
             <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</span></span><span class="q-exp" data-exp="${q.expires_at}">${left(q.expires_at)}</span></div>
             <p class="q-text" style="font-size:17px">${esc(q.body)}</p>
-            <div class="q-pay">${[q.urgent ? "Urgent" : null, q.min_mark >= 85 ? "HD only" : "Distinction and HD", q.wide ? "Similar courses included" : null].filter(Boolean).map(t => `<span class="tagchip">${t}</span>`).join("")}</div>
+            <div class="q-pay">${[q.urgent ? "Urgent" : null, "Open to D and HD tutors", "Similar courses included"].filter(Boolean).map(t => `<span class="tagchip">${t}</span>`).join("")}</div>
           </article>
           ${q.attachment_path ? `<div class="answer-tabs" id="ann-tabs"></div><div id="doc"></div>` : ""}
         </div>
@@ -628,7 +628,7 @@
           <div id="eq-st" hidden></div></div>`}
         <div class="panel" style="gap:10px"><div class="row" style="justify-content:space-between"><h3 style="font-size:18px">Courses I can tutor</h3><a href="#/tutor/apply">Add courses</a></div>
           <ul class="courses">${(tcs || []).map(x => `<li><span class="code">${esc(x.code)}</span><span class="ttl" title="${esc(x.title)}">${esc(x.title)}</span><span class="grade">${x.mark}<span class="badge ${gcls(x.grade || gradeFor(x.mark))}">${esc(x.grade || gradeFor(x.mark))}</span></span></li>`).join("")}</ul>
-          <small class="muted">Courses at 85+ also receive "HD only" questions.</small></div>
+          <small class="muted">You'll see questions in these courses and in similar courses at any uni.</small></div>
         <div class="panel" style="gap:4px"><h3 style="font-size:18px;margin-bottom:6px">Reviews</h3>
           ${(revs || []).length ? revs.map(v => `<div class="review"><div class="row" style="justify-content:space-between">${stars(v.stars)}<span class="muted" style="font-size:12px">${ago(v.created_at)}</span></div>${v.comment ? `<p style="font-size:14px">${esc(v.comment)}</p>` : ""}</div>`).join("") : `<p class="muted" style="font-size:14px">Reviews from students you help will appear here.</p>`}</div>
       </aside>
