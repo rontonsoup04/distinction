@@ -1,0 +1,103 @@
+# Generates seed.sql: every Australian university plus common courses.
+# similar_group links equivalent courses across unis so questions can reach tutors elsewhere.
+UNIS = [
+ ("UNSW","UNSW Sydney","UNSW","NSW"),("USYD","University of Sydney","USYD","NSW"),("UTS","University of Technology Sydney","UTS","NSW"),
+ ("MQ","Macquarie University","Macquarie","NSW"),("WSU","Western Sydney University","WSU","NSW"),("UOW","University of Wollongong","UOW","NSW"),
+ ("UON","University of Newcastle","Newcastle","NSW"),("SCU","Southern Cross University","SCU","NSW"),("CSU","Charles Sturt University","CSU","NSW"),
+ ("UNE","University of New England","UNE","NSW"),("ACU","Australian Catholic University","ACU","NSW"),
+ ("UNIMELB","University of Melbourne","Melbourne","VIC"),("MONASH","Monash University","Monash","VIC"),("RMIT","RMIT University","RMIT","VIC"),
+ ("DEAKIN","Deakin University","Deakin","VIC"),("LATROBE","La Trobe University","La Trobe","VIC"),("SWINBURNE","Swinburne University of Technology","Swinburne","VIC"),
+ ("VU","Victoria University","VU","VIC"),("FEDUNI","Federation University Australia","FedUni","VIC"),
+ ("UQ","University of Queensland","UQ","QLD"),("QUT","Queensland University of Technology","QUT","QLD"),("GRIFFITH","Griffith University","Griffith","QLD"),
+ ("JCU","James Cook University","JCU","QLD"),("CQU","CQUniversity","CQU","QLD"),("UNISQ","University of Southern Queensland","UniSQ","QLD"),
+ ("USC","University of the Sunshine Coast","UniSC","QLD"),("BOND","Bond University","Bond","QLD"),
+ ("UWA","University of Western Australia","UWA","WA"),("CURTIN","Curtin University","Curtin","WA"),("MURDOCH","Murdoch University","Murdoch","WA"),
+ ("ECU","Edith Cowan University","ECU","WA"),("UNDA","University of Notre Dame Australia","Notre Dame","WA"),
+ ("ADELAIDEU","Adelaide University","Adelaide Uni","SA"),("FLINDERS","Flinders University","Flinders","SA"),
+ ("UTAS","University of Tasmania","UTAS","TAS"),("ANU","Australian National University","ANU","ACT"),("UC","University of Canberra","UC","ACT"),
+ ("CDU","Charles Darwin University","CDU","NT"),("TORRENS","Torrens University Australia","Torrens","NSW"),("AVONDALE","Avondale University","Avondale","NSW"),
+]
+G = {  # group keys
+ "prog":"Intro programming","oop":"Object-oriented programming","dsa":"Data structures and algorithms","db":"Databases",
+ "sys":"Computer systems","web":"Web development","se":"Software engineering","micro":"Microeconomics","macro":"Macroeconomics",
+ "stats":"Business statistics","acct":"Intro accounting","fin":"Intro finance","mkt":"Marketing","calc":"First-year calculus",
+ "linalg":"Linear algebra","discrete":"Discrete maths","psych":"Intro psychology","is":"Information systems","mgmt":"Management",
+ "phys":"First-year physics","chem":"First-year chemistry","law":"Intro law","bpm":"Business process management","ba":"Business analysis",
+}
+C = {
+ "UNSW":[("COMP1511","Programming Fundamentals","prog"),("COMP1521","Computer Systems Fundamentals","sys"),("COMP1531","Software Engineering Fundamentals","se"),
+   ("COMP2521","Data Structures and Algorithms","dsa"),("COMP2511","Object-Oriented Design and Programming","oop"),("COMP3311","Database Systems","db"),
+   ("MATH1131","Mathematics 1A","calc"),("MATH1231","Mathematics 1B",None),("MATH1081","Discrete Mathematics","discrete"),("MATH1141","Higher Mathematics 1A","calc"),
+   ("ECON1101","Microeconomics 1","micro"),("ECON1102","Macroeconomics 1","macro"),("ECON1203","Business and Economic Statistics","stats"),
+   ("ACCT1501","Accounting and Financial Management 1A","acct"),("ACCT1511","Accounting and Financial Management 1B",None),
+   ("FINS1612","Capital Markets and Institutions",None),("FINS1613","Business Finance","fin"),("MGMT1001","Managing Organisations and People","mgmt"),
+   ("MARK1012","Marketing Fundamentals","mkt"),("INFS1602","Digital Transformation in Business","is"),("INFS1603","Business Databases","db"),
+   ("INFS1609","Fundamentals of Business Programming","oop"),("INFS2603","Business Analysis","ba"),("INFS2608","Database Management and Big Data Infrastructures","db"),
+   ("INFS3604","Business Process Management","bpm"),("COMM1100","Business Decision Making",None),("COMM1140","Financial Management",None),
+   ("COMM1170","Organisational Resources",None),("COMM1180","Value Creation",None),("COMM1190","Data, Insights and Decisions",None),
+   ("ENGG1811","Computing for Engineers","prog"),("PHYS1121","Physics 1A","phys"),("CHEM1011","Chemistry A","chem"),("PSYC1001","Psychology 1A","psych"),
+   ("LAWS1052","Introducing Law and Justice","law")],
+ "USYD":[("INFO1110","Introduction to Programming","prog"),("INFO1111","Computing 1A Professionalism",None),("INFO1112","Computing 1B OS and Network Platforms","sys"),
+   ("INFO1113","Object-Oriented Programming","oop"),("COMP2123","Data Structures and Algorithms","dsa"),("COMP2017","Systems Programming",None),
+   ("INFO2222","Computing 2 Usability and Security",None),("DATA1001","Foundations of Data Science",None),("MATH1021","Calculus of One Variable","calc"),
+   ("MATH1002","Linear Algebra","linalg"),("MATH1023","Multivariable Calculus and Modelling",None),("ECON1001","Introductory Microeconomics","micro"),
+   ("ECON1002","Introductory Macroeconomics","macro"),("BUSS1020","Quantitative Business Analysis","stats"),("ACCT1006","Accounting and Financial Management","acct"),
+   ("BUSS1030","Accounting, Business and Society",None),("FINC2011","Corporate Finance I","fin"),("PSYC1001","Psychology 1001","psych")],
+ "UTS":[("48023","Programming Fundamentals","prog"),("48024","Applications Programming","oop"),("31268","Web Systems","web"),("31271","Database Fundamentals","db"),
+   ("31251","Data Structures and Algorithms","dsa"),("33130","Mathematical Modelling 1","calc"),("22107","Accounting for Business Decisions A","acct"),
+   ("23115","Economics for Business","micro"),("25300","Fundamentals of Business Finance","fin"),("24108","Marketing Foundations","mkt")],
+ "MQ":[("COMP1000","Introduction to Computer Programming","prog"),("COMP1010","Fundamentals of Computer Science","dsa"),
+   ("COMP1350","Introduction to Database Design and Management","db"),("STAT1170","Introductory Statistics","stats"),("ACCG1000","Accounting for Decision Making","acct"),
+   ("MATH1010","Calculus and Linear Algebra I","calc"),("PSYU1101","Psychology: Human Behaviour","psych")],
+ "WSU":[("300580","Programming Fundamentals","prog"),("300581","Programming Techniques","oop"),("300582","Technologies for Web Applications","web"),
+   ("300585","Systems Analysis and Design","ba"),("300103","Data Structures and Algorithms","dsa")],
+ "UOW":[("CSIT111","Programming Fundamentals","prog"),("CSIT113","Problem Solving",None),("CSIT114","System Analysis","ba"),("CSIT115","Data Management and Security","db"),
+   ("CSCI203","Algorithms and Data Structures","dsa")],
+ "UON":[("SENG1110","Object Oriented Programming","oop"),("SENG1120","Data Structures","dsa"),("INFT2040","Database Management Systems","db"),
+   ("MATH1110","Mathematics 1","calc"),("STAT1070","Statistics for the Sciences","stats")],
+ "UNIMELB":[("COMP10001","Foundations of Computing","prog"),("COMP10002","Foundations of Algorithms","dsa"),("COMP20003","Algorithms and Data Structures","dsa"),
+   ("COMP20008","Elements of Data Processing",None),("INFO20003","Database Systems","db"),("MAST10005","Calculus 1","calc"),("MAST10006","Calculus 2",None),
+   ("MAST10007","Linear Algebra","linalg"),("ECON10004","Introductory Microeconomics","micro"),("ECON10003","Introductory Macroeconomics","macro"),
+   ("ACCT10001","Accounting Reports and Analysis","acct"),("ACCT10002","Introductory Financial Accounting",None),("FNCE10002","Principles of Finance","fin"),
+   ("MKTG10001","Principles of Marketing","mkt"),("PSYC10003","Mind, Brain and Behaviour 1","psych")],
+ "MONASH":[("FIT1045","Introduction to Programming","prog"),("FIT1051","Programming Fundamentals in Java","oop"),("FIT1008","Fundamentals of Algorithms","dsa"),
+   ("FIT2004","Algorithms and Data Structures","dsa"),("FIT2094","Databases","db"),("FIT1047","Introduction to Computer Systems, Networks and Security","sys"),
+   ("MTH1030","Techniques for Modelling","calc"),("MTH1020","Analysis of Change",None),("ETC1000","Business and Economic Statistics","stats"),
+   ("ECC1000","Principles of Microeconomics","micro"),("ECC1100","Principles of Macroeconomics","macro"),("ACC1100","Introduction to Financial Accounting","acct"),
+   ("AFF1000","Principles of Accounting and Finance",None),("BFF1001","Foundations of Finance","fin"),("MKF1120","Marketing Theory and Practice","mkt"),
+   ("PSY1011","Psychology 1A","psych")],
+ "RMIT":[("COSC2531","Programming Fundamentals","prog"),("COSC1076","Advanced Programming Techniques","oop"),("ISYS1057","Database Concepts","db")],
+ "DEAKIN":[("SIT102","Introduction to Programming","prog"),("SIT111","Computer Systems","sys"),("SIT103","Database Fundamentals","db"),("SIT221","Data Structures and Algorithms","dsa")],
+ "LATROBE":[("CSE1OOF","Object-Oriented Programming Fundamentals","prog"),("CSE1IOO","Intermediate Object-Oriented Programming","oop"),("CSE2DBF","Database Fundamentals","db")],
+ "SWINBURNE":[("COS10009","Introduction to Programming","prog"),("COS20007","Object Oriented Programming","oop")],
+ "UQ":[("CSSE1001","Introduction to Software Engineering","prog"),("CSSE2002","Programming in the Large","oop"),("CSSE2010","Introduction to Computer Systems","sys"),
+   ("COMP3506","Algorithms and Data Structures","dsa"),("INFS1200","Introduction to Information Systems","is"),("DECO1400","Introduction to Web Design","web"),
+   ("MATH1051","Calculus and Linear Algebra I","calc"),("STAT1201","Analysis of Scientific Data",None),("ECON1010","Introductory Microeconomics","micro"),
+   ("ECON1020","Introductory Macroeconomics","macro"),("ECON1310","Introductory Statistics for Social Sciences","stats"),("ACCT1101","Accounting for Decision Making","acct")],
+ "QUT":[("CAB201","Programming Principles","prog"),("IFB104","Building IT Systems",None),("IFB103","IT Systems Design","ba"),("IFB105","Database Management","db"),
+   ("CAB230","Web Computing","web"),("CAB202","Microprocessors and Digital Systems","sys"),("BSB110","Accounting","acct"),("BSB113","Economics","micro"),
+   ("BSB123","Data Analysis","stats"),("BSB126","Marketing","mkt")],
+ "JCU":[("CP1401","Fundamentals of Problem Solving and Programming I","prog"),("CP1404","Programming II","oop")],
+ "UWA":[("CITS1401","Computational Thinking with Python","prog"),("CITS1402","Relational Database Management Systems","db"),("CITS2200","Data Structures and Algorithms","dsa"),
+   ("MATH1011","Multivariable Calculus",None),("MATH1012","Mathematical Theory and Methods",None),("ECON1101","Microeconomics: Prices and Markets","micro"),
+   ("ECON1102","Macroeconomics: Money and Finance","macro"),("ACCT1101","Financial Accounting","acct"),("STAT1400","Statistics for Science","stats")],
+ "CURTIN":[("COMP1005","Fundamentals of Programming","prog"),("COMP1007","Unix and C Programming","sys"),("ISYS1001","Database Systems","db")],
+ "FLINDERS":[("COMP1102","Computer Programming 1","prog")],
+ "UTAS":[("KIT101","Programming Fundamentals","prog"),("KIT205","Data Structures and Algorithms","dsa")],
+ "ANU":[("COMP1100","Programming as Problem Solving","prog"),("COMP1730","Programming for Scientists","prog"),("COMP1110","Structured Programming","oop"),
+   ("COMP2100","Software Design Methodologies","se"),("COMP2400","Relational Databases","db"),("MATH1013","Mathematics and Applications 1","calc"),
+   ("MATH1014","Mathematics and Applications 2","linalg"),("ECON1101","Microeconomics 1","micro"),("ECON1102","Macroeconomics 1","macro"),
+   ("STAT1003","Statistical Techniques","stats"),("BUSN1001","Business Reporting and Analysis","acct"),("FINM1001","Foundations of Finance","fin")],
+}
+def q(s): return "'" + s.replace("'","''") + "'"
+out=["-- Seed data: Australian universities and common courses. Safe to re-run.",
+     "insert into public.universities (id, name, short_name, state) values"]
+out.append(",\n".join(f"  ({q(a)}, {q(b)}, {q(c)}, {q(d)})" for a,b,c,d in UNIS)+"\non conflict (id) do update set name = excluded.name, short_name = excluded.short_name, state = excluded.state;\n")
+rows=[]
+for uni,lst in C.items():
+    for code,title,g in lst:
+        rows.append(f"  ({q(uni)}, {q(code)}, {q(title)}, {q(g) if g else 'null'}, 'seed')")
+out.append("insert into public.courses (uni_id, code, title, similar_group, source) values")
+out.append(",\n".join(rows)+"\non conflict (uni_id, code) do update set title = excluded.title, similar_group = excluded.similar_group;\n")
+open("seed.sql","w").write("\n".join(out))
+print(len(UNIS),"unis",len(rows),"courses")
