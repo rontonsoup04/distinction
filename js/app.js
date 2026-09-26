@@ -1,0 +1,943 @@
+/* Distinction: app logic (Supabase auth, routing and pages) */
+(function () {
+  const { $, $$, esc, money, words, initials, kb, ago, left, mins, gradeFor, gcls, stars, toast, status, openModal, closeModal, glassSelect, chipsInput } = UI;
+  const cfg = window.DISTINCTION_CONFIG;
+  const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit" } });
+  window.sb = sb;
+
+  const WORD_LIMIT = 50, MAX_FILE = 5 * 1024 * 1024, CLAIM_MIN = 10, URGENT_MIN = 20, PAY = 1.10, URGENT_PAY = 1.70;
+  const FILE_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
+  const YEARS = ["1st year", "2nd year", "3rd year", "4th year", "5th year or later", "Postgraduate"];
+  const DURS = [{ value: "1", label: "1 hour" }, { value: "3", label: "3 hours" }, { value: "6", label: "6 hours" }, { value: "12", label: "12 hours" }, { value: "24", label: "1 day", sub: "Most answers" }];
+  const validCode = c => /^[A-Z0-9]{3,12}$/.test(c || "") && /\d{3}/.test(c || "");
+
+  const S = { session: null, user: null, profile: null, unis: [], uniMap: {}, courses: {}, timers: [], ready: false };
+
+  /* ---------------- data ---------------- */
+  async function loadUnis() {
+    const { data, error } = await sb.from("universities").select("*").order("name");
+    if (error) throw error;
+    S.unis = data; S.uniMap = Object.fromEntries(data.map(u => [u.id, u]));
+  }
+  async function coursesFor(uni) {
+    if (!uni) return [];
+    if (S.courses[uni]) return S.courses[uni];
+    const { data } = await sb.from("courses").select("code,title,similar_group").eq("uni_id", uni).order("code");
+    return (S.courses[uni] = data || []);
+  }
+  const courseOpts = list => list.map(c => ({ value: c.code, label: c.code, sub: c.title }));
+  const uniOpts = () => S.unis.map(u => ({ value: u.id, label: u.name, sub: u.state }));
+  const uniName = id => (S.uniMap[id] && S.uniMap[id].name) || id || "";
+  const uniShort = id => (S.uniMap[id] && S.uniMap[id].short_name) || id || "";
+  async function ensureCourse(uni, code) {
+    const list = await coursesFor(uni);
+    if (list.some(c => c.code === code)) return;
+    await sb.from("courses").insert({ uni_id: uni, code, title: "", source: "user" });
+    list.push({ code, title: "" });
+  }
+  async function loadProfile() {
+    if (!S.user) { S.profile = null; return; }
+    const { data } = await sb.from("profiles").select("*").eq("id", S.user.id).maybeSingle();
+    S.profile = data;
+  }
+  const displayName = p => (p && (p.display_name || (p.full_name || "").split(" ")[0])) || "Student";
+  const errMsg = e => (e && (e.message || e.error_description)) || "Something went wrong. Try again.";
+
+  /* ---------------- shell ---------------- */
+  function renderHeader() {
+    const p = S.profile, signedIn = !!S.user;
+    const route = location.hash.split("/")[1] || "";
+    const links = signedIn && p && p.onboarded ? [
+      ["ask", "Ask a question"], ["questions", "My questions"], ["tutor", "Tutor"],
+      ...(p.is_admin ? [["admin", "Admin"]] : [])
+    ] : [];
+    $("#nav").innerHTML = links.map(([r, l]) => `<a href="#/${r}" class="navlink" ${route === r || (r === "tutor" && route === "answer") ? 'aria-current="page"' : ""}>${l}</a>`).join("");
+    $("#auth-area").innerHTML = signedIn
+      ? `<button class="avatar-btn" id="me-btn" aria-haspopup="menu"><span class="avatar" aria-hidden="true">${esc(initials(p && p.full_name || S.user.email))}</span><span>${esc(p ? displayName(p) : "Account")}</span></button>`
+      : `<a class="btn ghost sm" href="#/login">Log in</a><a class="btn primary sm" href="#/signup">Sign up</a>`;
+    const btn = $("#me-btn");
+    if (btn) btn.onclick = e => { e.stopPropagation(); const m = $("#menu"); m.hidden = !m.hidden; };
+    $("#menu").innerHTML = signedIn ? `<div class="who">Signed in as<br><b style="color:var(--ink)">${esc(S.user.email)}</b></div><a href="#/profile">Profile and settings</a><a href="#/tutor">Tutor profile</a><button id="signout">Sign out</button>` : "";
+    const so = $("#signout"); if (so) so.onclick = async () => { $("#menu").hidden = true; await sb.auth.signOut(); toast("Signed out"); location.hash = "#/"; };
+  }
+  document.addEventListener("click", e => { if (!e.target.closest("#menu") && !e.target.closest("#me-btn")) $("#menu").hidden = true; });
+  // nav links styled like tabs
+  const navStyle = document.createElement("style");
+  navStyle.textContent = `#nav{display:flex;gap:4px;flex-wrap:wrap;flex:1}#nav a{padding:8px 12px;border-radius:8px;color:var(--muted);font-weight:500;text-decoration:none}#nav a:hover{color:var(--ink);background:var(--surface-2)}#nav a[aria-current="page"]{color:var(--ink);background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}`;
+  document.head.append(navStyle);
+
+  const app = () => $("#app");
+  function clearTimers() { S.timers.forEach(clearInterval); S.timers = []; }
+  function every(ms, fn) { S.timers.push(setInterval(fn, ms)); }
+
+  /* ---------------- router ---------------- */
+  const PUBLIC = ["", "login", "signup", "reset", "new-password"];
+  async function route() {
+    if (!S.ready) return;
+    clearTimers(); closeModal(); $("#menu").hidden = true;
+    const parts = location.hash.replace(/^#\/?/, "").split("/");
+    const r = parts[0] || "";
+    renderHeader();
+    window.scrollTo(0, 0);
+    if (!S.user && !PUBLIC.includes(r)) { sessionStorage.setItem("after-login", location.hash); location.hash = "#/login"; return; }
+    if (S.user && ["login", "signup"].includes(r)) { location.hash = "#/"; return; }
+    if (S.user && S.profile && !S.profile.onboarded && !["welcome", "tutor", "new-password", "profile"].includes(r) && !(r === "tutor" && parts[1] === "apply")) {
+      location.hash = S.profile.intended_role === "tutor" ? "#/tutor/apply" : "#/welcome"; return;
+    }
+    try {
+      switch (r) {
+        case "": return S.user ? (location.hash = "#/ask") : pageHome();
+        case "login": return pageLogin();
+        case "signup": return pageSignup(parts[1]);
+        case "reset": return pageReset();
+        case "new-password": return pageNewPassword();
+        case "welcome": return pageWelcome();
+        case "profile": return pageProfile();
+        case "ask": return pageAsk();
+        case "questions": return pageMyQuestions();
+        case "q": return pageQuestion(parts[1]);
+        case "tutor": return parts[1] === "apply" ? pageTutorApply() : pageTutor();
+        case "answer": return pageAnswer(parts[1]);
+        case "admin": return pageAdmin();
+        default: app().innerHTML = `<div class="empty">Page not found. <a href="#/">Go home</a></div>`;
+      }
+    } catch (e) { console.error(e); app().innerHTML = `<div class="status err">${esc(errMsg(e))}</div>`; }
+  }
+  window.addEventListener("hashchange", route);
+
+  /* ---------------- landing ---------------- */
+  function pageHome() {
+    app().innerHTML = `<section class="view">
+      <div class="hero-land">
+        <div>
+          <p class="tagline">Let's succeed as a generation.</p>
+          <h1>Ask about any course. Students with an <em>HD</em> answer.</h1>
+          <p class="fast"><span class="pulse" aria-hidden="true"></span>Receive an answer in a couple of minutes</p>
+          <p class="muted" style="max-width:52ch;margin-top:12px">Pick your uni and course, ask a short question, and it goes to students who got a Distinction or High Distinction in that exact course, and in similar courses at other unis. Standard questions are usually answered within an hour. Urgent ones within 20 minutes.</p>
+          <div class="cta-row"><a class="btn primary" href="#/signup/student">Sign up to ask</a><a class="btn" href="#/signup/tutor">Become a tutor</a><a class="btn ghost" href="#/login">Log in</a></div>
+        </div>
+        <div class="q demo-q" aria-hidden="true">
+          <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">INFS2608</span><span class="q-time">UNSW · 2 min ago</span></span><span class="q-exp live">Urgent</span></div>
+          <p class="q-text">When normalising to 3NF, how do I tell a transitive dependency apart from a normal one?</p>
+          <div class="ans"><div class="ans-head"><span class="ord">1st</span><b>Tom N.</b><span class="grade">92<span class="badge HD">HD</span></span><span class="eq">✓ My eQuals</span></div>
+          <div class="bubbles"><div class="bubble">Check whether a non-key column depends on another non-key column.</div><div class="bubble">If CourseTitle depends on CourseCode, split them into their own table.</div></div></div>
+        </div>
+      </div>
+      <div class="two-up">
+        <div class="panel feature"><span class="eyebrow">For students</span><h2>Answers from people who aced your course</h2><ul><li>Pick your uni and course from 40 Australian universities</li><li>50-word questions with one PDF or image</li><li>Choose HD only or Distinction and up, and My eQuals verified tutors</li><li>Get 2, 3 or 5 answers. Rate each one.</li></ul><a class="btn primary" href="#/signup/student" style="align-self:flex-start">Sign up as a student</a></div>
+        <div class="panel feature"><span class="eyebrow">For tutors</span><h2>Earn up to $34 an hour from your phone</h2><ul><li>Upload your transcript. We check it and approve your D and HD courses.</li><li>Claim a question, then answer with text and by drawing on the student's document</li><li>$1.10 per answer, $1.70 for urgent questions answered within 20 minutes</li></ul><a class="btn" href="#/signup/tutor" style="align-self:flex-start">Apply to tutor</a></div>
+      </div>
+    </section>`;
+  }
+
+  /* ---------------- auth ---------------- */
+  const GOOGLE_SVG = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
+  async function google(role) {
+    if (role) localStorage.setItem("intended-role", role);
+    const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + "/" } });
+    if (error) toast(/provider is not enabled|Unsupported provider/i.test(error.message) ? "Google sign-in isn't switched on yet. Use email and password for now." : errMsg(error), 5000);
+  }
+  function pageLogin() {
+    app().innerHTML = `<div class="narrow"><form class="panel auth-card" id="f" novalidate>
+      <h1>Log in</h1>
+      <button type="button" class="btn block google" id="g">${GOOGLE_SVG}Continue with Google</button>
+      <div class="divider">or</div>
+      <label class="field"><span>Email</span><input type="email" id="email" autocomplete="email" required></label>
+      <label class="field"><span>Password</span><input type="password" id="pw" autocomplete="current-password" required></label>
+      <div id="st" hidden></div>
+      <button class="btn primary block" id="go">Log in</button>
+      <div class="row" style="justify-content:space-between"><a href="#/reset">Forgot your password?</a><a href="#/signup">Create an account</a></div>
+    </form></div>`;
+    $("#g").onclick = () => google();
+    $("#f").onsubmit = async e => {
+      e.preventDefault();
+      const email = $("#email").value.trim(), password = $("#pw").value;
+      if (!email || !password) return status($("#st"), "Enter your email and password.", "err");
+      $("#go").disabled = true; status($("#st"), "Logging in…", "", true);
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      $("#go").disabled = false;
+      if (error) return status($("#st"), /Email not confirmed/i.test(error.message) ? "Confirm your email first. Check your inbox for the link we sent." : /Invalid login/i.test(error.message) ? "That email and password don't match. Try again or reset your password." : errMsg(error), "err");
+    };
+  }
+  function pageSignup(role) {
+    role = role === "tutor" ? "tutor" : "student";
+    app().innerHTML = `<div class="narrow"><form class="panel auth-card" id="f" novalidate>
+      <h1>Create your account</h1>
+      <div class="role-pick" role="radiogroup" aria-label="I want to">
+        <label><input type="radio" name="role" value="student" ${role === "student" ? "checked" : ""}><span class="role"><b>Ask questions</b><small>Student account</small></span></label>
+        <label><input type="radio" name="role" value="tutor" ${role === "tutor" ? "checked" : ""}><span class="role"><b>Answer and earn</b><small>Tutor account, needs a transcript check</small></span></label>
+      </div>
+      <button type="button" class="btn block google" id="g">${GOOGLE_SVG}Sign up with Google</button>
+      <div class="divider">or</div>
+      <label class="field"><span>Full name</span><input type="text" id="name" autocomplete="name" required></label>
+      <label class="field"><span>Email</span><input type="email" id="email" autocomplete="email" required><small>Use any email. Your uni email works well.</small></label>
+      <label class="field"><span>Password</span><input type="password" id="pw" autocomplete="new-password" minlength="8" required><small>At least 8 characters.</small></label>
+      <div id="st" hidden></div>
+      <button class="btn primary block" id="go">Create account</button>
+      <div class="row" style="justify-content:center"><span class="muted">Already have an account?</span><a href="#/login">Log in</a></div>
+    </form></div>`;
+    const roleVal = () => document.querySelector('input[name="role"]:checked').value;
+    $("#g").onclick = () => google(roleVal());
+    $("#f").onsubmit = async e => {
+      e.preventDefault();
+      const full_name = $("#name").value.trim(), email = $("#email").value.trim(), password = $("#pw").value;
+      if (!full_name) return status($("#st"), "Enter your full name.", "err");
+      if (!/^\S+@\S+\.\S+$/.test(email)) return status($("#st"), "Enter a valid email address.", "err");
+      if (password.length < 8) return status($("#st"), "Use a password of at least 8 characters.", "err");
+      $("#go").disabled = true; status($("#st"), "Creating your account…", "", true);
+      const { data, error } = await sb.auth.signUp({ email, password, options: { data: { full_name, intended_role: roleVal() }, emailRedirectTo: location.origin + "/" } });
+      $("#go").disabled = false;
+      if (error) return status($("#st"), /already registered/i.test(error.message) ? "There's already an account with that email. Log in instead." : errMsg(error), "err");
+      if (!data.session) {
+        app().innerHTML = `<div class="narrow"><div class="panel auth-card"><h1>Check your email</h1><p>We sent a confirmation link to <b>${esc(email)}</b>. Open it to finish creating your account. You can close this tab.</p><p class="muted" style="font-size:14px">Can't find it? Check your spam folder.</p></div></div>`;
+      }
+    };
+  }
+  function pageReset() {
+    app().innerHTML = `<div class="narrow"><form class="panel auth-card" id="f" novalidate><h1>Reset your password</h1><p class="muted">We'll email you a link to set a new password.</p>
+      <label class="field"><span>Email</span><input type="email" id="email" autocomplete="email" required></label><div id="st" hidden></div>
+      <button class="btn primary block" id="go">Send reset link</button><a href="#/login">Back to log in</a></form></div>`;
+    $("#f").onsubmit = async e => {
+      e.preventDefault();
+      const email = $("#email").value.trim(); if (!email) return status($("#st"), "Enter your email.", "err");
+      $("#go").disabled = true;
+      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + "/" });
+      $("#go").disabled = false;
+      status($("#st"), error ? errMsg(error) : "If there's an account for that email, a reset link is on its way.", error ? "err" : "ok");
+    };
+  }
+  function pageNewPassword() {
+    app().innerHTML = `<div class="narrow"><form class="panel auth-card" id="f" novalidate><h1>Set a new password</h1>
+      <label class="field"><span>New password</span><input type="password" id="pw" autocomplete="new-password" minlength="8" required></label><div id="st" hidden></div>
+      <button class="btn primary block" id="go">Save password</button></form></div>`;
+    $("#f").onsubmit = async e => {
+      e.preventDefault();
+      const password = $("#pw").value; if (password.length < 8) return status($("#st"), "Use at least 8 characters.", "err");
+      const { error } = await sb.auth.updateUser({ password });
+      if (error) return status($("#st"), errMsg(error), "err");
+      toast("Password updated"); location.hash = "#/";
+    };
+  }
+
+  /* ---------------- profile forms ---------------- */
+  async function profileFields(root, p, opts = {}) {
+    root.innerHTML = `
+      <div class="two">
+        <label class="field"><span>Full name</span><input type="text" id="pf-name" value="${esc(p.full_name || "")}" autocomplete="name"></label>
+        <label class="field"><span>Display name</span><input type="text" id="pf-display" value="${esc(p.display_name || "")}" placeholder="e.g. Alex C." maxlength="30"><small>This is what ${opts.tutor ? "students" : "tutors"} see.</small></label>
+      </div>
+      <div class="field"><span id="pf-uni-lbl">University</span><div id="pf-uni" data-label="pf-uni-lbl"></div></div>
+      <div class="two">
+        <label class="field"><span>Degree</span><input type="text" id="pf-degree" value="${esc(p.degree || "")}" placeholder="e.g. Bachelor of Information Systems"></label>
+        <div class="field"><span id="pf-year-lbl">Year of study</span><div id="pf-year" data-label="pf-year-lbl"></div></div>
+      </div>
+      ${opts.tutor ? `<label class="field"><span>Short intro for students</span><textarea class="prose" id="pf-bio" maxlength="400" placeholder="What you're good at explaining.">${esc(p.bio || "")}</textarea></label>` : `
+      <div class="field"><span>Courses you're taking this term</span><div id="pf-courses"></div><small>We'll suggest these when you ask a question.</small></div>
+      <div class="two">
+        <div class="field"><span id="pf-lang-lbl">Preferred answer language</span><div id="pf-lang" data-label="pf-lang-lbl"></div></div>
+        <label class="field"><span>How did you hear about us? (optional)</span><input type="text" id="pf-heard" value="${esc(p.heard_from || "")}" maxlength="80"></label>
+      </div>`}`;
+    const uniSel = glassSelect($("#pf-uni", root), { options: uniOpts(), value: p.uni_id || null, placeholder: "Choose your university", search: "Search universities", onChange: async v => { if (chips) { S._sug = courseOpts(await coursesFor(v)); chips.refresh(); } } });
+    const yearSel = glassSelect($("#pf-year", root), { options: YEARS.map(y => ({ value: y, label: y })), value: p.year_of_study || null, placeholder: "Choose" });
+    let chips = null, langSel = null;
+    if (!opts.tutor) {
+      S._sug = courseOpts(await coursesFor(p.uni_id));
+      chips = chipsInput($("#pf-courses", root), { values: p.current_courses || [], suggest: () => S._sug || [], placeholder: "Add a course code, e.g. COMP1511" });
+      langSel = glassSelect($("#pf-lang", root), { options: ["English", "Mandarin", "Cantonese", "Hindi", "Vietnamese", "Korean", "Other"].map(l => ({ value: l, label: l })), value: p.answer_language || "English" });
+    }
+    return () => {
+      const v = {
+        full_name: $("#pf-name", root).value.trim(), display_name: $("#pf-display", root).value.trim(),
+        uni_id: uniSel.value, degree: $("#pf-degree", root).value.trim(), year_of_study: yearSel.value
+      };
+      if (opts.tutor) v.bio = $("#pf-bio", root).value.trim();
+      else { v.current_courses = chips.values; v.answer_language = langSel.value; v.heard_from = $("#pf-heard", root).value.trim(); }
+      return v;
+    };
+  }
+  function checkProfile(v) {
+    if (!v.full_name) return "Enter your full name.";
+    if (!v.display_name) return "Enter a display name, such as your first name and last initial.";
+    if (!v.uni_id) return "Choose your university.";
+    if (!v.degree) return "Enter your degree.";
+    if (!v.year_of_study) return "Choose your year of study.";
+    return null;
+  }
+  async function saveProfile(v) {
+    const { data, error } = await sb.from("profiles").update(v).eq("id", S.user.id).select().single();
+    if (error) throw error;
+    S.profile = data; renderHeader(); return data;
+  }
+
+  async function pageWelcome() {
+    const p = S.profile;
+    app().innerHTML = `<div class="medium"><div class="panel"><div><span class="eyebrow">Welcome</span><h1 style="font-size:30px;margin-top:4px">Tell us about your studies</h1><p class="muted" style="margin-top:6px">This helps us send your questions to the right people.</p></div>
+      <div id="fields" class="col"></div><div id="st" hidden></div>
+      <div class="row" style="justify-content:space-between"><a href="#/tutor/apply">I want to tutor instead</a><button class="btn primary" id="save">Continue</button></div></div></div>`;
+    const read = await profileFields($("#fields"), { ...p, display_name: p.display_name || suggestDisplay(p.full_name) });
+    $("#save").onclick = async () => {
+      const v = read(); const bad = checkProfile(v); if (bad) return status($("#st"), bad, "err");
+      $("#save").disabled = true;
+      try { await saveProfile({ ...v, is_student: true, onboarded: true }); toast("You're all set"); location.hash = "#/ask"; }
+      catch (e) { status($("#st"), errMsg(e), "err"); $("#save").disabled = false; }
+    };
+  }
+  const suggestDisplay = n => { const w = String(n || "").trim().split(/\s+/); return w.length > 1 ? `${w[0]} ${w[w.length - 1][0]}.` : (w[0] || ""); };
+
+  async function pageProfile() {
+    const p = S.profile;
+    app().innerHTML = `<div class="medium"><div class="panel"><div><span class="eyebrow">Account</span><h1 style="font-size:30px;margin-top:4px">Profile and settings</h1><p class="muted">${esc(S.user.email)}</p></div>
+      <div id="fields" class="col"></div>
+      ${p.tutor_status !== "none" ? `<label class="field"><span>Tutor intro</span><textarea class="prose" id="bio" maxlength="400">${esc(p.bio || "")}</textarea></label>` : ""}
+      <div id="st" hidden></div>
+      <div class="row" style="justify-content:space-between"><button class="btn ghost" id="out">Sign out</button><button class="btn primary" id="save">Save changes</button></div></div></div>`;
+    const read = await profileFields($("#fields"), p);
+    $("#out").onclick = async () => { await sb.auth.signOut(); location.hash = "#/"; };
+    $("#save").onclick = async () => {
+      const v = read(); const bad = checkProfile(v); if (bad) return status($("#st"), bad, "err");
+      if ($("#bio")) v.bio = $("#bio").value.trim();
+      try { await saveProfile({ ...v, is_student: true, onboarded: true }); status($("#st"), "Saved.", "ok"); } catch (e) { status($("#st"), errMsg(e), "err"); }
+    };
+  }
+
+  /* ---------------- ask ---------------- */
+  async function pageAsk() {
+    const p = S.profile;
+    app().innerHTML = `<section class="view">
+      <div class="intro" style="align-items:start">
+        <div>
+          <p class="tagline">Let's succeed as a generation.</p>
+          <h1>Ask about any course. Students with an <em>HD</em> answer.</h1>
+          <p class="fast"><span class="pulse" aria-hidden="true"></span>Receive an answer in a couple of minutes</p>
+          <p>Your question goes to students who got a High Distinction (or a Distinction, if you choose) in that course, and in similar courses at other unis. Standard questions are usually answered within an hour. Tick Urgent for answers within 20 minutes.</p>
+          <div class="how" style="margin-top:22px">
+            <div><span class="stepno">1 · PICK</span><b>Uni and course</b><p>It reaches people who aced that course, plus similar courses elsewhere if you want faster answers.</p></div>
+            <div><span class="stepno">2 · CHOOSE</span><b>Who answers</b><p>Distinction and up, or HD only. Add My eQuals verification if you want extra certainty.</p></div>
+            <div><span class="stepno">3 · GET</span><b>Answers</b><p>Tutors reply in short messages and can mark up your PDF or image directly.</p></div>
+          </div>
+          <a class="recruit" href="#/tutor"><span><b>Got an HD?</b> Earn up to $34 an hour answering quick questions in the courses you aced.</span><span class="recruit-go">Start earning →</span></a>
+        </div>
+        <form class="panel composer" id="compose" novalidate>
+          <div class="two tight">
+            <div class="field"><span id="a-uni-lbl">University</span><div id="a-uni" data-label="a-uni-lbl"></div></div>
+            <div class="field"><span id="a-course-lbl">Course</span><div class="pop-right" id="a-course" data-label="a-course-lbl"></div></div>
+          </div>
+          <label class="check"><input type="checkbox" id="a-wide" checked> Also send to similar courses at other unis</label>
+          <div class="field">
+            <div class="row" style="justify-content:space-between"><label for="a-text" style="font-size:13px;font-weight:500">Your question</label><span class="words" id="a-words">0 / ${WORD_LIMIT} words</span></div>
+            <textarea class="prose" id="a-text" style="min-height:76px" placeholder="Keep it short: what you're stuck on and which week or assignment it's from."></textarea>
+            <div class="attach"><label class="linkbtn attach-btn" for="a-file" id="a-file-btn">+ Attach a file</label><input type="file" id="a-file" accept="${FILE_TYPES.join(",")}" hidden><span id="a-file-chip"></span><small class="muted">1 image or PDF, up to 5 MB</small></div>
+          </div>
+          <div class="field"><span>Who can answer</span>
+            <div class="seg" role="radiogroup" aria-label="Minimum grade"><label><input type="radio" name="a-grade" value="75" checked><span>Distinction and HD</span></label><label><input type="radio" name="a-grade" value="85"><span>HD only</span></label></div>
+            <label class="check"><input type="checkbox" id="a-verified"> Only students verified by My eQuals</label>
+          </div>
+          <div class="field"><span>How many answers</span>
+            <div class="boxes" role="radiogroup" aria-label="Number of answers">
+              ${[2, 3, 5].map((n, i) => `<label><input type="radio" name="a-count" value="${n}" ${i === 0 ? "checked" : ""}><span class="box"><b>${n}</b><small>answers</small></span></label>`).join("")}
+            </div>
+            <p class="speed-note">Standard questions are usually answered within an hour.</p>
+            <label class="check urgent-check"><input type="checkbox" id="a-urgent"><span><b>Urgent</b>: answers within 20 minutes</span></label>
+          </div>
+          <div class="post-row"><div class="field dur"><span id="a-dur-lbl">Open for</span><div id="a-dur" data-label="a-dur-lbl"></div></div><button class="btn primary" id="a-post">Post question</button></div>
+          <div id="a-status" hidden></div>
+        </form>
+      </div>
+      <div class="col"><div class="results-head"><h2>Your recent questions</h2><a href="#/questions">See all</a></div><div class="qgrid" id="recent"></div></div>
+    </section>`;
+
+    const courseSel = glassSelect($("#a-course"), { options: [], value: null, mono: true, placeholder: "Choose a course", search: "Search or type a course code", freeText: validCode, emptyText: "No matches. Type the full course code to use it." });
+    async function loadCourses(uni) {
+      const list = courseOpts(await coursesFor(uni));
+      const mine = (p.current_courses || []).filter(c => uni === p.uni_id);
+      mine.forEach(c => { if (!list.some(o => o.value === c)) list.unshift({ value: c, label: c, sub: "Your course" }); });
+      list.sort((a, b) => (mine.includes(b.value) - mine.includes(a.value)) || a.value.localeCompare(b.value));
+      courseSel.setOptions(list, mine[0] || null);
+    }
+    const uniSel2 = glassSelect($("#a-uni"), { options: uniOpts(), value: p.uni_id, search: "Search universities", onChange: loadCourses });
+    await loadCourses(p.uni_id);
+    const durSel = glassSelect($("#a-dur"), { options: DURS, value: "24" });
+
+    let attach = null;
+    $("#a-file").onchange = e => {
+      const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+      if (!FILE_TYPES.includes(f.type)) return toast("Attach a PDF or an image (PNG, JPG or WebP).");
+      if (f.size > MAX_FILE) return toast(`That file is ${kb(f.size)}. The limit is 5 MB.`);
+      attach = f; renderAttach();
+    };
+    function renderAttach() {
+      $("#a-file-chip").innerHTML = attach ? `<span class="fchip">${attach.type === "application/pdf" ? "PDF" : "IMG"} · ${esc(attach.name)} · ${kb(attach.size)} <button type="button" class="linkbtn" id="a-file-rm">Remove</button></span>` : "";
+      $("#a-file-btn").hidden = !!attach;
+      const rm = $("#a-file-rm"); if (rm) rm.onclick = () => { attach = null; renderAttach(); };
+    }
+    $("#a-text").oninput = () => { const w = words($("#a-text").value); const el = $("#a-words"); el.textContent = `${w} / ${WORD_LIMIT} words`; el.classList.toggle("over", w > WORD_LIMIT); };
+
+    $("#compose").onsubmit = async e => {
+      e.preventDefault();
+      const st = $("#a-status");
+      const code = courseSel.value, uni = uniSel2.value, text = $("#a-text").value.trim(), w = words(text);
+      if (!uni) return status(st, "Choose your university.", "err");
+      if (!validCode(code)) return status(st, "Pick a course from the list, or type its code in the search box.", "err");
+      if (w < 5) return status(st, "Write a bit more so tutors know what you're stuck on.", "err");
+      if (w > WORD_LIMIT) return status(st, `Your question is ${w} words. Cut it to ${WORD_LIMIT} or fewer.`, "err");
+      const btn = $("#a-post"); btn.disabled = true; status(st, attach ? "Uploading your file…" : "Posting…", "", true);
+      try {
+        let att = {};
+        if (attach) {
+          const path = `${S.user.id}/${Date.now()}-${attach.name.replace(/[^\w.\-]+/g, "_").slice(-80)}`;
+          const { error } = await sb.storage.from("attachments").upload(path, attach, { contentType: attach.type, upsert: false });
+          if (error) throw error;
+          att = { attachment_path: path, attachment_name: attach.name, attachment_type: attach.type, attachment_size: attach.size };
+        }
+        await ensureCourse(uni, code).catch(() => { });
+        const hours = +durSel.value;
+        const row = {
+          asker_id: S.user.id, uni_id: uni, course_code: code, body: text, ...att,
+          min_mark: +document.querySelector('input[name="a-grade"]:checked').value,
+          verified_only: $("#a-verified").checked, wide: $("#a-wide").checked, urgent: $("#a-urgent").checked,
+          slots: +document.querySelector('input[name="a-count"]:checked').value,
+          expires_at: new Date(Date.now() + hours * 3600e3).toISOString()
+        };
+        const { data, error } = await sb.from("questions").insert(row).select("id").single();
+        if (error) throw error;
+        toast("Question posted. We'll show answers here as they arrive.");
+        location.hash = "#/q/" + data.id;
+      } catch (err) { status(st, errMsg(err), "err"); btn.disabled = false; }
+    };
+    renderRecent($("#recent"), 4);
+  }
+
+  async function myQuestions(limit) {
+    let q = sb.from("questions").select("id, uni_id, course_code, body, slots, urgent, min_mark, verified_only, expires_at, created_at, attachment_name, answers(count)").eq("asker_id", S.user.id).order("created_at", { ascending: false });
+    if (limit) q = q.limit(limit);
+    const { data, error } = await q; if (error) throw error; return data;
+  }
+  function qSummary(q) {
+    const n = (q.answers && q.answers[0] && q.answers[0].count) || 0, closed = new Date(q.expires_at) < new Date();
+    return `<a class="q-link" href="#/q/${q.id}"><article class="q${closed ? " closed" : ""}">
+      <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniShort(q.uni_id))} · ${ago(q.created_at)}</span></span><span class="q-exp${closed ? "" : " live"}">${left(q.expires_at)}</span></div>
+      <p class="q-text">${esc(q.body)}</p>
+      <div class="q-pay"><span class="slotbar">${Array.from({ length: q.slots }, (_, i) => `<i class="${i < n ? "on" : ""}"></i>`).join("")}</span><span>${n} of ${q.slots} answers</span>${q.urgent ? '<span class="tagchip">Urgent</span>' : ""}${q.attachment_name ? '<span class="tagchip">Attachment</span>' : ""}</div>
+    </article></a>`;
+  }
+  async function renderRecent(el, limit) {
+    const qs = await myQuestions(limit);
+    el.innerHTML = qs.length ? qs.map(qSummary).join("") : `<div class="empty">You haven't asked anything yet.</div>`;
+  }
+  async function pageMyQuestions() {
+    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">My questions</h1><a class="btn primary" href="#/ask">Ask a question</a></div><div class="qgrid" id="list"><div class="boot">Loading…</div></div></section>`;
+    await renderRecent($("#list"));
+  }
+
+  /* ---------------- question detail (student) ---------------- */
+  async function signedUrl(bucket, path) {
+    const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, 3600);
+    if (error) throw error; return data.signedUrl;
+  }
+  async function pageQuestion(id) {
+    app().innerHTML = `<div class="boot">Loading question…</div>`;
+    const { data: q, error } = await sb.from("questions").select("*").eq("id", id).maybeSingle();
+    if (error) throw error;
+    if (!q) { app().innerHTML = `<div class="empty">This question doesn't exist or you don't have access to it.</div>`; return; }
+    const mine = q.asker_id === S.user.id;
+    app().innerHTML = `<section class="view">
+      <a href="#/questions">← My questions</a>
+      <div class="answer-layout">
+        <div class="col">
+          <article class="q">
+            <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</span></span><span class="q-exp" data-exp="${q.expires_at}">${left(q.expires_at)}</span></div>
+            <p class="q-text" style="font-size:17px">${esc(q.body)}</p>
+            <div class="q-pay">${[q.urgent ? "Urgent" : null, q.min_mark >= 85 ? "HD only" : "Distinction and HD", q.verified_only ? "My eQuals verified" : null, q.wide ? "Similar courses included" : null].filter(Boolean).map(t => `<span class="tagchip">${t}</span>`).join("")}</div>
+          </article>
+          ${q.attachment_path ? `<div class="answer-tabs" id="ann-tabs"></div><div id="doc"></div>` : ""}
+        </div>
+        <aside class="answer-side"><div class="results-head"><h2>Answers</h2><span class="muted" id="count"></span></div><div class="col" id="answers"></div></aside>
+      </div></section>`;
+    let doc = null;
+    if (q.attachment_path) {
+      try { doc = await DocView.mount($("#doc"), { url: await signedUrl("attachments", q.attachment_path), type: q.attachment_type, editable: false }); }
+      catch (e) { $("#doc").innerHTML = `<div class="status err">${esc(errMsg(e))}</div>`; }
+    }
+    let shownAnswer = null, lastIds = "";
+    async function load() {
+      const { data: ans } = await sb.from("answers").select("*").eq("question_id", id).order("position");
+      const answers = ans || [];
+      $("#count").textContent = `${answers.length} of ${q.slots}`;
+      const ids = answers.map(a => a.id).join();
+      if (ids === lastIds && answers.length) return; lastIds = ids;
+      const tutorIds = [...new Set(answers.map(a => a.tutor_id))];
+      const [{ data: tutors }, { data: tcs }, { data: revs }] = await Promise.all([
+        tutorIds.length ? sb.from("profiles").select("id, display_name, full_name, uni_id, equals_verified").in("id", tutorIds) : { data: [] },
+        tutorIds.length ? sb.from("tutor_courses").select("tutor_id, uni_id, code, mark, grade").in("tutor_id", tutorIds).eq("status", "approved") : { data: [] },
+        answers.length ? sb.from("reviews").select("answer_id, stars, comment").in("answer_id", answers.map(a => a.id)) : { data: [] }
+      ]);
+      const tMap = Object.fromEntries((tutors || []).map(t => [t.id, t]));
+      const closed = new Date(q.expires_at) < new Date();
+      $("#answers").innerHTML = answers.length ? answers.map((a, i) => {
+        const t = tMap[a.tutor_id] || {}, tc = (tcs || []).filter(x => x.tutor_id === a.tutor_id);
+        const course = tc.find(x => x.uni_id === q.uni_id && x.code === q.course_code) || tc[0];
+        const rv = (revs || []).find(r => r.answer_id === a.id);
+        const c = DocView.count(a.annotations);
+        return `<div class="answer-card${shownAnswer === a.id ? " active" : ""}" data-a="${a.id}">
+          <div class="ans-head"><span class="ord">${["1st", "2nd", "3rd", "4th", "5th"][i]}</span><b>${esc(displayName(t))}</b>${course ? `<span class="grade">${course.mark}<span class="badge ${gcls(course.grade || gradeFor(course.mark))}">${esc(course.grade || gradeFor(course.mark))}</span></span>` : ""}${course && (course.uni_id !== q.uni_id || course.code !== q.course_code) ? `<span class="simchip"><b>${esc(uniShort(course.uni_id))}</b> ${esc(course.code)}</span>` : ""}${t.equals_verified ? '<span class="eq">✓ My eQuals</span>' : ""}<span class="muted">${ago(a.created_at)}</span></div>
+          <div class="bubbles">${(a.bubbles || []).map(b => `<div class="bubble">${esc(b)}</div>`).join("")}</div>
+          ${c.strokes || c.notes ? `<button class="btn sm" data-show="${a.id}">${shownAnswer === a.id ? "Hide" : "Show"} markup on your document (${c.notes} note${c.notes === 1 ? "" : "s"}, ${c.strokes} drawing${c.strokes === 1 ? "" : "s"})</button>` : ""}
+          ${mine ? (rv ? `<div class="muted" style="font-size:13px">You rated ${stars(rv.stars)}</div>` : `<div class="row" style="justify-content:space-between"><span class="stars-in" role="group" aria-label="Rate this answer">${[1, 2, 3, 4, 5].map(n => `<button data-rate="${a.id}:${a.tutor_id}:${n}" aria-label="${n} star${n > 1 ? "s" : ""}">★</button>`).join("")}</span><button class="linkbtn" data-report="${a.id}">Report</button></div>`) : ""}
+        </div>`;
+      }).join("") : `<div class="empty">${closed ? "This question closed without answers." : `<span class="spin"></span> Waiting for answers. ${q.urgent ? "Urgent questions usually get answers within 20 minutes." : "Most questions are answered within an hour."}`}</div>`;
+      window._answers = answers;
+    }
+    $("#answers").addEventListener("click", async e => {
+      const sh = e.target.closest("[data-show]");
+      if (sh && doc) {
+        const a = (window._answers || []).find(x => x.id === sh.dataset.show);
+        shownAnswer = shownAnswer === a.id ? null : a.id;
+        doc.setAnnotations(shownAnswer ? a.annotations : {});
+        lastIds = ""; await load();
+        if (shownAnswer) $("#doc").scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      const r = e.target.closest("[data-rate]");
+      if (r) {
+        const [answer_id, tutor_id, n] = r.dataset.rate.split(":");
+        openModal(`<h3>Rate this answer ${stars(+n, 20)}</h3><label class="field"><span>Comment (optional)</span><textarea class="prose" id="rv-c" maxlength="300" placeholder="What made it helpful?"></textarea></label><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="rv-go">Submit rating</button></div>`, m => {
+          $("#rv-go", m).onclick = async () => {
+            const { error } = await sb.from("reviews").insert({ answer_id, tutor_id, student_id: S.user.id, stars: +n, comment: $("#rv-c", m).value.trim() || null });
+            if (error) return toast(errMsg(error));
+            closeModal(); toast("Thanks for rating"); lastIds = ""; load();
+          };
+        });
+        return;
+      }
+      const rp = e.target.closest("[data-report]");
+      if (rp) {
+        openModal(`<h3>Report this answer</h3><p class="muted" style="font-size:14px">Tell us what's wrong. We review every report.</p><label class="field"><span>Reason</span><textarea class="prose" id="rp-r" maxlength="500" placeholder="For example: wrong, off-topic, or looks like a copied assignment."></textarea></label><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="rp-go">Send report</button></div>`, m => {
+          $("#rp-go", m).onclick = async () => {
+            const reason = $("#rp-r", m).value.trim(); if (!reason) return toast("Add a short reason.");
+            const { error } = await sb.from("reports").insert({ answer_id: rp.dataset.report, reporter_id: S.user.id, reason });
+            if (error) return toast(errMsg(error)); closeModal(); toast("Report sent. Thanks.");
+          };
+        });
+      }
+    });
+    await load();
+    every(15000, () => { const el = $("[data-exp]"); if (el) el.textContent = left(el.dataset.exp); if (new Date(q.expires_at) > new Date()) load(); });
+  }
+
+  /* ---------------- tutor ---------------- */
+  async function pageTutor() {
+    const p = S.profile;
+    if (!p.onboarded || p.tutor_status === "none") return tutorPitch();
+    if (p.tutor_status === "pending") return tutorPending();
+    if (p.tutor_status === "rejected") return tutorRejected();
+    return tutorDashboard();
+  }
+  function tutorPitch() {
+    app().innerHTML = `<section class="view"><div class="intro"><div>
+      <h1>Turn your best marks into up to $34 an hour.</h1>
+      <p>Upload your transcript and we'll check it. Every course where you got a Distinction (75+) or High Distinction becomes a course you can tutor. Then answer short questions from students for $1.10 each, or $1.70 for urgent questions answered within 20 minutes. Most take about 3 minutes.</p>
+      <div class="cta-row"><a class="btn primary" href="#/tutor/apply">Apply to tutor</a></div></div>
+      <div class="how"><div><span class="stepno">STEP 1</span><b>Profile</b><p>Your uni, degree and a short intro.</p></div><div><span class="stepno">STEP 2</span><b>Transcript</b><p>Upload it. We read your marks and you check them.</p></div><div><span class="stepno">STEP 3</span><b>Review</b><p>We confirm your transcript, usually within 48 hours.</p></div></div>
+    </div></section>`;
+  }
+  async function tutorPending() {
+    const { data: tcs } = await sb.from("tutor_courses").select("*").eq("tutor_id", S.user.id).order("mark", { ascending: false });
+    app().innerHTML = `<div class="medium"><div class="panel pending-card"><span class="status-pill pending">Under review</span><h1 style="font-size:28px">We're checking your transcript</h1>
+      <p class="muted">We'll approve your courses once we've matched them to your transcript, usually within 48 hours. You can keep asking questions in the meantime.</p>
+      <ul class="courses" style="width:100%">${(tcs || []).map(x => `<li><span class="code">${esc(x.code)}</span><span class="ttl">${esc(x.title)}</span><span class="grade">${x.mark}<span class="badge ${gcls(x.grade || gradeFor(x.mark))}">${esc(x.grade || gradeFor(x.mark))}</span></span></li>`).join("")}</ul>
+      <a class="btn" href="#/ask">Ask a question</a></div></div>`;
+  }
+  async function tutorRejected() {
+    const { data: apps } = await sb.from("tutor_applications").select("admin_notes, reviewed_at").eq("user_id", S.user.id).order("submitted_at", { ascending: false }).limit(1);
+    app().innerHTML = `<div class="medium"><div class="panel pending-card"><span class="status-pill rejected">Not approved</span><h1 style="font-size:28px">We couldn't approve your application</h1>
+      ${apps && apps[0] && apps[0].admin_notes ? `<p><b>Reviewer's note:</b> ${esc(apps[0].admin_notes)}</p>` : `<p class="muted">We couldn't match your courses to your transcript.</p>`}
+      <a class="btn primary" href="#/tutor/apply">Apply again</a></div></div>`;
+  }
+
+  async function tutorDashboard() {
+    const p = S.profile;
+    app().innerHTML = `<div class="boot">Loading your tutor profile…</div>`;
+    const [{ data: st }, { data: tcs }, { data: revs }] = await Promise.all([
+      sb.rpc("tutor_stats", { t: S.user.id }),
+      sb.from("tutor_courses").select("*").eq("tutor_id", S.user.id).eq("status", "approved").order("mark", { ascending: false }),
+      sb.from("reviews").select("stars, comment, created_at, student_id").eq("tutor_id", S.user.id).order("created_at", { ascending: false }).limit(8)
+    ]);
+    const s = (st && st[0]) || {};
+    app().innerHTML = `<div class="tutor-layout">
+      <aside class="col">
+        <div class="panel prof">
+          <div class="t-head"><div class="avatar lg" aria-hidden="true">${esc(initials(p.full_name))}</div>
+            <div style="min-width:0"><h2 style="font-size:22px">${esc(displayName(p))}</h2><div class="t-meta">${esc(uniName(p.uni_id))}</div><div class="t-meta">${esc(p.degree || "")}</div>
+            ${p.equals_verified ? '<div class="verified">✓ Verified with My eQuals</div>' : '<div class="verified" style="color:var(--muted)">Transcript checked</div>'}</div></div>
+          <div class="rating-row"><span class="rating-big">${s.reviews_count ? Number(s.rating).toFixed(1) : "New"}</span><div>${stars(Number(s.rating || 0), 20)}<div class="muted" style="font-size:13px">${s.reviews_count || 0} review${s.reviews_count === 1 ? "" : "s"}</div></div></div>
+          <div class="stats"><div><b>${s.answers_count || 0}</b><span>Answers</span></div><div><b>${money(Number(s.earned || 0))}</b><span>Earned</span></div><div><b>${s.answers_count ? Math.round((s.urgent_count || 0) / s.answers_count * 100) + "%" : "—"}</b><span>Urgent</span></div></div>
+          ${p.bio ? `<p style="font-size:14px">${esc(p.bio)}</p>` : `<a href="#/profile">Add a short intro</a>`}
+        </div>
+        <div class="panel" style="gap:10px"><div class="row" style="justify-content:space-between"><h3 style="font-size:18px">Courses I can tutor</h3><a href="#/tutor/apply">Add courses</a></div>
+          <ul class="courses">${(tcs || []).map(x => `<li><span class="code">${esc(x.code)}</span><span class="ttl" title="${esc(x.title)}">${esc(x.title)}</span><span class="grade">${x.mark}<span class="badge ${gcls(x.grade || gradeFor(x.mark))}">${esc(x.grade || gradeFor(x.mark))}</span></span></li>`).join("")}</ul>
+          <small class="muted">Courses at 85+ also receive "HD only" questions.</small></div>
+        <div class="panel" style="gap:4px"><h3 style="font-size:18px;margin-bottom:6px">Reviews</h3>
+          ${(revs || []).length ? revs.map(v => `<div class="review"><div class="row" style="justify-content:space-between">${stars(v.stars)}<span class="muted" style="font-size:12px">${ago(v.created_at)}</span></div>${v.comment ? `<p style="font-size:14px">${esc(v.comment)}</p>` : ""}</div>`).join("") : `<p class="muted" style="font-size:14px">Reviews from students you help will appear here.</p>`}</div>
+      </aside>
+      <div class="col">
+        <div class="earn-strip"><div><div class="eyebrow" style="color:inherit;opacity:.7">Earned so far</div><div class="earn-amt">${money(Number(s.earned || 0))}</div></div>
+          <div class="earn-rules"><span><b>$1.10</b> per answer</span><span class="ebr"><b>$1.70</b> urgent questions answered within 20 min</span><span>Payouts start when payments launch. Your earnings are tracked from today.</span></div></div>
+        <div class="pitch"><div class="pitch-main"><span class="eyebrow">Your earning potential</span><div class="pitch-big">Up to <b>$34</b> an hour</div><p>Questions are 50 words or less, so most answers take about 3 minutes. Answer 20 urgent questions an hour at $1.70 each, from your phone, between classes.</p><div class="pitch-now">This week: <b>${s.week_count || 0}</b> answer${s.week_count === 1 ? "" : "s"}</div></div>
+          <div class="goals"><div class="goal"><div class="row" style="justify-content:space-between"><b>Weekly goal</b><span class="mono">${Math.min(20, s.week_count || 0)}/20</span></div><div class="meter"><i style="width:${Math.min(100, (s.week_count || 0) * 5)}%"></i></div><small>Answer 20 questions this week to hit your goal.</small></div></div></div>
+        <div class="results-head"><h2>Pending questions</h2><span class="muted" style="font-size:13px">You can hold one question at a time</span></div>
+        <div class="col" id="feed"><div class="boot" style="min-height:80px">Loading questions…</div></div>
+      </div></div>`;
+    await renderFeed();
+    every(30000, renderFeed);
+    $("#feed").addEventListener("click", async e => {
+      const c = e.target.closest("[data-claim]");
+      if (c) {
+        c.disabled = true;
+        const { error } = await sb.rpc("claim_question", { q_id: c.dataset.claim });
+        if (error) { toast(errMsg(error), 5000); c.disabled = false; return renderFeed(); }
+        location.hash = "#/answer/" + c.dataset.claim;
+      }
+    });
+  }
+  async function renderFeed() {
+    const el = $("#feed"); if (!el) return;
+    const { data, error } = await sb.rpc("tutor_feed");
+    if (error) { el.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
+    const now = Date.now();
+    const holding = data.find(q => q.my_claim_expires && new Date(q.my_claim_expires) > now && q.my_position == null);
+    const rank = q => (q.my_position != null ? 3 : 0) + (q.answer_count >= q.slots ? 2 : 0) + (q.urgent && new Date(q.created_at).getTime() + URGENT_MIN * 60e3 > now ? 0 : 1);
+    data.sort((a, b) => rank(a) - rank(b) || new Date(b.created_at) - new Date(a.created_at));
+    el.innerHTML = data.length ? data.map(q => feedCard(q, holding)).join("") : `<div class="empty">No open questions in your courses right now. New ones show up here automatically.</div>`;
+  }
+  function feedCard(q, holding) {
+    const now = Date.now(), ebEnd = new Date(q.created_at).getTime() + URGENT_MIN * 60e3;
+    const eb = q.urgent && ebEnd > now;
+    const full = q.answer_count >= q.slots, answered = q.my_position != null;
+    const claimed = q.my_claim_expires && new Date(q.my_claim_expires) > now;
+    const spots = q.slots - q.answer_count - q.held_by_others;
+    const similar = q.match_code && (q.match_uni !== q.uni_id || q.match_code !== q.course_code);
+    let action;
+    if (answered) action = `<div class="elig yes">✓ You answered ${["1st", "2nd", "3rd", "4th", "5th"][q.my_position - 1]} · ${money(Number(q.my_payout))}${Number(q.my_payout) > PAY ? " (urgent rate)" : ""}</div>`;
+    else if (new Date(q.expires_at) <= now) action = `<div class="muted" style="font-size:13px">This question has closed.</div>`;
+    else if (claimed) action = `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">Held for you · ${mins(new Date(q.my_claim_expires) - now)} min left</span><a class="btn primary sm" href="#/answer/${q.id}">Continue answering</a></div>`;
+    else if (full) action = `<div class="muted" style="font-size:13px">All ${q.slots} spots have been answered.</div>`;
+    else if (spots <= 0) action = `<div class="muted" style="font-size:13px">All remaining spots are held by other tutors. Check back in a few minutes.</div>`;
+    else action = `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">${holding ? `Finish or release your <span class="mono">${esc(holding.course_code)}</span> question to claim this one` : `${spots} of ${q.slots} spot${q.slots > 1 ? "s" : ""} left`}</span><button class="btn primary sm" data-claim="${q.id}" ${holding ? "disabled" : ""}>Claim to answer</button></div>`;
+    return `<article class="q tq${answered || full ? " done" : ""}">
+      <div class="tq-head"><div class="avatar sm" aria-hidden="true">${esc(initials(q.asker_name))}</div>
+        <div style="min-width:0;flex:1"><b>${esc(q.asker_name)}</b><div class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</div></div>
+        <div class="reward-box${eb ? " eb" : ""}">${eb ? `<span class="eb-tag">Urgent</span><b>${money(URGENT_PAY)}</b><small>${mins(ebEnd - now)} min left, then ${money(PAY)}</small>` : `<b>${money(PAY)}</b><small>Reward</small>`}</div></div>
+      <div class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="muted" style="font-size:13px">${esc(q.course_title)}</span>${similar ? `<span class="simchip">Similar to your ${esc(q.match_code)}</span>` : ""}${q.min_mark >= 85 ? '<span class="tagchip">HD only</span>' : ""}${q.verified_only ? '<span class="tagchip">Verified only</span>' : ""}</div>
+      <p class="q-text">${esc(q.body)}</p>
+      ${q.attachment_name ? `<span class="fchip">${q.attachment_type === "application/pdf" ? "PDF" : "IMG"} · ${esc(q.attachment_name)} · ${kb(q.attachment_size || 0)}</span>` : ""}
+      ${action}
+    </article>`;
+  }
+
+  /* ---------------- answer editor (tutor) ---------------- */
+  const drafts = {};
+  async function pageAnswer(id) {
+    app().innerHTML = `<div class="boot">Loading question…</div>`;
+    const { data, error } = await sb.rpc("tutor_feed"); if (error) throw error;
+    const q = data.find(x => x.id === id);
+    if (!q) { app().innerHTML = `<div class="empty">This question isn't available to you. <a href="#/tutor">Back to questions</a></div>`; return; }
+    if (q.my_position != null) { toast("You've already answered this question"); location.hash = "#/tutor"; return; }
+    let claimUntil = q.my_claim_expires ? new Date(q.my_claim_expires) : null;
+    const d = drafts[id] || (drafts[id] = { bubbles: [""], ann: null });
+    const eb = () => q.urgent && new Date(q.created_at).getTime() + URGENT_MIN * 60e3 > Date.now();
+    app().innerHTML = `<section class="view">
+      <a href="#/tutor">← Pending questions</a>
+      <div class="${q.attachment_path ? "answer-layout" : "medium"}">
+        ${q.attachment_path ? `<div class="doc-wrap"><div class="doc-toolbar" role="toolbar" aria-label="Markup tools">
+            <button class="tool" data-tool="pen" aria-pressed="true">Pen</button><button class="tool" data-tool="highlight" aria-pressed="false">Highlighter</button><button class="tool" data-tool="note" aria-pressed="false">Text note</button>
+            <span style="width:8px"></span>${DocView.COLORS.map((c, i) => `<button class="swatch" data-color="${c}" style="background:${c}" aria-label="Colour ${i + 1}" aria-pressed="${i === 0}"></button>`).join("")}
+            <span style="flex:1"></span><button class="tool" id="undo">Undo</button><button class="tool" id="clear">Clear</button></div>
+            <p class="muted" style="font-size:13px">Draw or add text notes directly on the student's document. You can't upload files.</p>
+            <div id="doc"></div></div>` : ""}
+        <div class="${q.attachment_path ? "answer-side" : "col"}">
+          <article class="q">
+            <div class="tq-head"><div class="avatar sm" aria-hidden="true">${esc(initials(q.asker_name))}</div><div style="flex:1;min-width:0"><b>${esc(q.asker_name)}</b><div class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</div></div>
+              <div class="reward-box${eb() ? " eb" : ""}" id="reward"></div></div>
+            <div class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="muted" style="font-size:13px">${esc(q.course_title)}</span></div>
+            <p class="q-text" style="font-size:16px">${esc(q.body)}</p>
+          </article>
+          <div class="panel" style="gap:12px">
+            <div class="row" style="justify-content:space-between"><h3 style="font-size:18px">Your answer</h3><span class="muted" style="font-size:13px" id="claim-state"></span></div>
+            <p class="muted" style="font-size:13px">Explain it in short messages, in your own words. Pasting is limited to short snippets, and files can't be attached, so answers stay original.</p>
+            <div class="composer-bubbles" id="bubbles"></div>
+            <div class="row" style="justify-content:space-between"><button class="btn sm" id="add-b">+ Add another message</button><span class="counter" id="total"></span></div>
+            <div id="st" hidden></div>
+            <div class="row" style="justify-content:space-between"><button class="btn ghost" id="release">Release question</button><button class="btn primary" id="submit">Submit answer</button></div>
+          </div>
+        </div>
+      </div></section>`;
+    // claim if not yet held
+    async function ensureClaim() {
+      if (claimUntil && claimUntil > new Date()) return true;
+      const { data: until, error } = await sb.rpc("claim_question", { q_id: id });
+      if (error) { status($("#st"), errMsg(error), "err"); return false; }
+      claimUntil = new Date(until); paintClaim(); return true;
+    }
+    function paintClaim() {
+      const el = $("#claim-state"); if (!el) return;
+      el.textContent = claimUntil && claimUntil > new Date() ? `Held for you · ${mins(claimUntil - Date.now())} min left` : "Hold expired. Submitting will still work if a spot is free.";
+      $("#reward").innerHTML = eb() ? `<span class="eb-tag">Urgent</span><b>${money(URGENT_PAY)}</b><small>${mins(new Date(q.created_at).getTime() + URGENT_MIN * 60e3 - Date.now())} min left, then ${money(PAY)}</small>` : `<b>${money(PAY)}</b><small>Reward</small>`;
+    }
+    await ensureClaim(); paintClaim();
+    every(15000, paintClaim);
+
+    function renderBubbles() {
+      $("#bubbles").innerHTML = d.bubbles.map((b, i) => `<div class="b-row"><textarea class="prose" data-b="${i}" maxlength="800" placeholder="${i === 0 ? "Start with the key idea…" : "Add more detail…"}" aria-label="Message ${i + 1}">${esc(b)}</textarea>${d.bubbles.length > 1 ? `<button class="btn ghost sm" data-rm="${i}" aria-label="Remove message ${i + 1}">×</button>` : ""}</div>`).join("");
+      updateTotal();
+    }
+    function updateTotal() { const t = d.bubbles.reduce((a, b) => a + b.length, 0); const el = $("#total"); el.textContent = `${t} / 2500 characters`; el.classList.toggle("over", t > 2500); }
+    $("#bubbles").addEventListener("input", e => { const i = e.target.dataset.b; if (i != null) { d.bubbles[+i] = e.target.value; updateTotal(); } });
+    $("#bubbles").addEventListener("paste", e => {
+      const t = e.clipboardData.getData("text/plain") || "";
+      if (e.clipboardData.files && e.clipboardData.files.length) { e.preventDefault(); toast("Files can't be added to answers."); return; }
+      if (t.length > 120) { e.preventDefault(); toast("Pasting is limited to 120 characters. Type your explanation in your own words."); }
+    });
+    $("#bubbles").addEventListener("drop", e => { e.preventDefault(); toast("Files can't be added to answers."); });
+    $("#bubbles").addEventListener("click", e => { const r = e.target.closest("[data-rm]"); if (r) { d.bubbles.splice(+r.dataset.rm, 1); renderBubbles(); } });
+    $("#add-b").onclick = () => { if (d.bubbles.length >= 10) return toast("Up to 10 messages per answer."); d.bubbles.push(""); renderBubbles(); $$("#bubbles textarea").pop().focus(); };
+    renderBubbles();
+
+    let docApi = null;
+    if (q.attachment_path) {
+      try {
+        docApi = await DocView.mount($("#doc"), { url: await signedUrl("attachments", q.attachment_path), type: q.attachment_type, editable: true, annotations: d.ann, onChange: () => { d.ann = docApi.annotations; } });
+      } catch (e) { $("#doc").innerHTML = `<div class="status err">${esc(errMsg(e))}</div>`; }
+      $$(".doc-toolbar [data-tool]").forEach(b => b.onclick = () => { $$(".doc-toolbar [data-tool]").forEach(x => x.setAttribute("aria-pressed", x === b)); docApi && docApi.setTool(b.dataset.tool); });
+      $$(".doc-toolbar [data-color]").forEach(b => b.onclick = () => { $$(".doc-toolbar [data-color]").forEach(x => x.setAttribute("aria-pressed", x === b)); docApi && docApi.setColor(b.dataset.color); });
+      $("#undo").onclick = () => docApi && docApi.undo();
+      $("#clear").onclick = () => { if (!docApi) return; openModal(`<h3>Clear all markup?</h3><p class="muted">This removes every drawing and note on the document.</p><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="cl-go">Clear markup</button></div>`, m => { $("#cl-go", m).onclick = () => { docApi.clear(); closeModal(); }; }); };
+    }
+
+    $("#release").onclick = async () => { await sb.rpc("release_claim", { q_id: id }); delete drafts[id]; toast("Question released"); location.hash = "#/tutor"; };
+    $("#submit").onclick = async () => {
+      const bubbles = d.bubbles.map(b => b.trim()).filter(Boolean);
+      const total = bubbles.reduce((a, b) => a + b.length, 0);
+      if (!bubbles.length || total < 30) return status($("#st"), "Write at least 30 characters so the answer is useful.", "err");
+      if (total > 2500) return status($("#st"), "Keep the whole answer under 2,500 characters.", "err");
+      $("#submit").disabled = true; status($("#st"), "Submitting…", "", true);
+      const { data: row, error } = await sb.rpc("submit_answer", { q_id: id, p_bubbles: bubbles, p_annotations: docApi ? docApi.annotations : {} });
+      $("#submit").disabled = false;
+      if (error) return status($("#st"), errMsg(error), "err");
+      delete drafts[id];
+      const r = Array.isArray(row) ? row[0] : row;
+      toast(`Answer sent. ${money(Number(r && r.payout || PAY))} added to your earnings${r && r.urgent_rate ? " at the urgent rate" : ""}.`, 4500);
+      location.hash = "#/tutor";
+    };
+  }
+
+  /* ---------------- tutor application ---------------- */
+  async function pageTutorApply() {
+    const p = S.profile;
+    const A = { step: 1, courses: [], file: null, path: null, myequals: "", agree: [false, false, false] };
+    app().innerHTML = `<div class="medium"><div class="col">
+      <div><span class="eyebrow">Tutor application</span><h1 style="font-size:30px;margin-top:4px">Become a Distinction tutor</h1></div>
+      <div class="steps" id="steps"></div><div class="panel" id="body"></div></div></div>`;
+    const STEPS = ["Profile", "Transcript", "Verification", "Submit"];
+    const paintSteps = () => $("#steps").innerHTML = STEPS.map((s, i) => `<span class="${i + 1 === A.step ? "on" : i + 1 < A.step ? "done" : ""}">${i + 1}. ${s}</span>`).join("");
+    let readProfile = null;
+
+    async function step1() {
+      $("#body").innerHTML = `<h2>Your profile</h2><p class="muted" style="font-size:14px">Students see your display name, uni, degree and intro.</p><div id="fields" class="col"></div><div id="st" hidden></div><div class="row" style="justify-content:flex-end"><button class="btn primary" id="next">Continue</button></div>`;
+      readProfile = await profileFields($("#fields"), { ...p, display_name: p.display_name || suggestDisplay(p.full_name) }, { tutor: true });
+      $("#next").onclick = async () => {
+        const v = readProfile(); const bad = checkProfile(v); if (bad) return status($("#st"), bad, "err");
+        try { await saveProfile({ ...v, is_student: true, onboarded: true }); A.step = 2; render(); } catch (e) { status($("#st"), errMsg(e), "err"); }
+      };
+    }
+    function step2() {
+      $("#body").innerHTML = `<h2>Upload your transcript</h2>
+        <p class="muted" style="font-size:14px">Upload your official academic transcript as a PDF or screenshot. We'll try to read your courses and marks, and you can fix anything we get wrong. Our team checks every transcript before approving.</p>
+        <label class="drop" id="drop" for="tfile"><strong>${A.file ? esc(A.file.name) : "Drop your transcript here"}</strong><span class="muted" style="font-size:14px">PDF or image, up to 10 MB. Or click to choose a file.</span><input type="file" id="tfile" accept="${FILE_TYPES.join(",")}" hidden></label>
+        <div id="st" hidden></div>
+        <div id="tbl"></div>
+        <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="next">Continue</button></div>`;
+      const drop = $("#drop");
+      ["dragover", "dragenter"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+      ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+      drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) take(f); });
+      $("#tfile").onchange = e => { const f = e.target.files[0]; if (f) take(f); };
+      async function take(f) {
+        if (!FILE_TYPES.includes(f.type)) return status($("#st"), "Upload a PDF or an image (PNG, JPG or WebP).", "err");
+        if (f.size > 10 * 1024 * 1024) return status($("#st"), "That file is over 10 MB.", "err");
+        A.file = f; A.path = null; drop.querySelector("strong").textContent = f.name;
+        if (f.type === "application/pdf") {
+          status($("#st"), "Reading your transcript…", "", true);
+          try { const text = await pdfText(f); const found = parseTranscript(text); if (found.length) { A.courses = found; status($("#st"), `Found ${found.length} courses. Check the marks below and fix anything that's wrong.`, "ok"); } else status($("#st"), "We couldn't read courses from this file. Add them below.", "err"); }
+          catch (e) { status($("#st"), "We couldn't read this PDF automatically. Add your courses below.", "err"); }
+        } else status($("#st"), "Add your courses and marks below. We'll check them against your screenshot.", "ok");
+        if (!A.courses.length) A.courses = [{ code: "", title: "", mark: "", grade: "" }];
+        table();
+      }
+      function table() {
+        if (!A.file) { $("#tbl").innerHTML = ""; return; }
+        $("#tbl").innerHTML = `<div class="table-wrap"><table class="tx-table"><thead><tr><th>Course code</th><th>Course name</th><th>Mark</th><th>Grade</th><th></th></tr></thead><tbody>
+          ${A.courses.map((c, i) => `<tr class="${+c.mark >= 75 ? "" : "ineligible"}"><td><input type="text" data-f="code" data-i="${i}" value="${esc(c.code)}" aria-label="Course code" style="text-transform:uppercase;font-family:var(--mono)"></td><td><input type="text" data-f="title" data-i="${i}" value="${esc(c.title)}" aria-label="Course name"></td><td class="num"><input type="number" min="0" max="100" data-f="mark" data-i="${i}" value="${esc(c.mark)}" aria-label="Mark"></td><td><input type="text" data-f="grade" data-i="${i}" value="${esc(c.grade)}" aria-label="Grade" style="width:60px"></td><td><button class="btn ghost sm" data-del="${i}" aria-label="Remove row">×</button></td></tr>`).join("")}
+          </tbody></table></div>
+          <div class="row" style="justify-content:space-between"><button class="btn sm" id="addrow">+ Add a course</button><span class="muted" style="font-size:13px"><b>${A.courses.filter(c => +c.mark >= 75).length}</b> course${A.courses.filter(c => +c.mark >= 75).length === 1 ? "" : "s"} at 75 or above will be sent for approval</span></div>`;
+        $("#tbl").oninput = e => { const f = e.target.dataset.f, i = e.target.dataset.i; if (f) { A.courses[+i][f] = f === "code" ? e.target.value.toUpperCase().replace(/\s/g, "") : e.target.value; } };
+        $("#tbl").onchange = e => { if (e.target.dataset.f === "mark") table(); };
+        $("#tbl").onclick = e => { const d = e.target.closest("[data-del]"); if (d) { A.courses.splice(+d.dataset.del, 1); table(); } if (e.target.id === "addrow") { A.courses.push({ code: "", title: "", mark: "", grade: "" }); table(); } };
+      }
+      table();
+      $("#back").onclick = () => { A.step = 1; render(); };
+      $("#next").onclick = async () => {
+        if (!A.file) return status($("#st"), "Upload your transcript first.", "err");
+        const good = A.courses.filter(c => c.code && validCode(c.code) && c.mark !== "" && +c.mark >= 75 && +c.mark <= 100);
+        if (!good.length) return status($("#st"), "Add at least one course with a mark of 75 or more, and a valid course code.", "err");
+        if (!A.path) {
+          status($("#st"), "Uploading your transcript…", "", true);
+          const path = `${S.user.id}/${Date.now()}-${A.file.name.replace(/[^\w.\-]+/g, "_").slice(-80)}`;
+          const { error } = await sb.storage.from("transcripts").upload(path, A.file, { contentType: A.file.type });
+          if (error) return status($("#st"), errMsg(error), "err");
+          A.path = path;
+        }
+        A.step = 3; render();
+      };
+    }
+    function step3() {
+      const rules = ["I'll explain concepts in my own words and won't complete assessable work for students.", "I won't share past assignments, exam answers or files. I'll only answer with text and markup on the student's document.", "The marks I entered match my official transcript."];
+      $("#body").innerHTML = `<h2>Verification</h2>
+        <label class="field"><span>My eQuals share link (optional, recommended)</span><input type="url" id="eq" value="${esc(A.myequals)}" placeholder="https://www.myequals.edu.au/…"><small>Share your official transcript from My eQuals to get the verified badge. Some students only accept answers from verified tutors.</small></label>
+        <div class="agree">${rules.map((r, i) => `<label class="check"><input type="checkbox" data-ag="${i}" ${A.agree[i] ? "checked" : ""}><span>${r}</span></label>`).join("")}</div>
+        <div id="st" hidden></div>
+        <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="next">Continue</button></div>`;
+      $("#body").onchange = e => { if (e.target.dataset.ag != null) A.agree[+e.target.dataset.ag] = e.target.checked; };
+      $("#back").onclick = () => { A.myequals = $("#eq").value.trim(); A.step = 2; render(); };
+      $("#next").onclick = () => {
+        A.myequals = $("#eq").value.trim();
+        if (A.myequals && !/^https:\/\/([\w-]+\.)*myequals\.(edu\.au|net)\//i.test(A.myequals)) return status($("#st"), "That doesn't look like a My eQuals link. Leave it blank or paste the share link from My eQuals.", "err");
+        if (A.agree.some(x => !x)) return status($("#st"), "Tick all three boxes to continue.", "err");
+        A.step = 4; render();
+      };
+    }
+    function step4() {
+      const good = A.courses.filter(c => c.code && validCode(c.code) && +c.mark >= 75 && +c.mark <= 100);
+      $("#body").innerHTML = `<h2>Review and submit</h2>
+        <dl class="kv"><dt>Name</dt><dd>${esc(S.profile.full_name || "")} (${esc(S.profile.display_name || "")})</dd><dt>University</dt><dd>${esc(uniName(S.profile.uni_id))}</dd><dt>Degree</dt><dd>${esc(S.profile.degree || "")}</dd><dt>Transcript</dt><dd>${esc(A.file.name)}</dd><dt>My eQuals</dt><dd>${A.myequals ? "Link provided" : "Not provided"}</dd></dl>
+        <ul class="courses">${good.map(c => `<li><span class="code">${esc(c.code)}</span><span class="ttl">${esc(c.title)}</span><span class="grade">${+c.mark}<span class="badge ${gcls(c.grade || gradeFor(+c.mark))}">${esc(c.grade || gradeFor(+c.mark))}</span></span></li>`).join("")}</ul>
+        <div id="st" hidden></div>
+        <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="go">Submit application</button></div>`;
+      $("#back").onclick = () => { A.step = 3; render(); };
+      $("#go").onclick = async () => {
+        $("#go").disabled = true; status($("#st"), "Submitting…", "", true);
+        const { error } = await sb.rpc("submit_tutor_application", { p_transcript_path: A.path, p_transcript_name: A.file.name, p_myequals: A.myequals, p_courses: good.map(c => ({ code: c.code, title: c.title, mark: +c.mark, grade: (c.grade || gradeFor(+c.mark)).toUpperCase() })) });
+        if (error) { $("#go").disabled = false; return status($("#st"), errMsg(error), "err"); }
+        await loadProfile(); renderHeader(); toast("Application submitted"); location.hash = "#/tutor";
+      };
+    }
+    function render() { paintSteps(); ({ 1: step1, 2: step2, 3: step3, 4: step4 })[A.step](); window.scrollTo(0, 0); }
+    if (p.onboarded && p.uni_id && p.degree) A.step = 2;
+    render();
+  }
+
+  async function pdfText(file) {
+    const doc = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+    let out = "";
+    for (let n = 1; n <= Math.min(doc.numPages, 10); n++) {
+      const page = await doc.getPage(n); const tc = await page.getTextContent();
+      let lastY = null; for (const it of tc.items) { const y = it.transform[5]; out += (lastY !== null && Math.abs(y - lastY) > 3 ? "\n" : " ") + it.str; lastY = y; }
+      out += "\n";
+    }
+    return out;
+  }
+  function parseTranscript(text) {
+    const out = [], seen = new Set();
+    const codeRe = /\b([A-Z]{2,5}\d{3,5}[A-Z]?|[A-Z]{3}\d[A-Z]{2,3}|\d{5,6})\b/;
+    for (const raw of text.split(/\n/)) {
+      const line = raw.replace(/\s+/g, " ").trim(); const m = line.match(codeRe); if (!m) continue;
+      const code = m[1]; if (seen.has(code) || /^(19|20)\d\d$/.test(code)) continue;
+      const after = line.slice(line.indexOf(code) + code.length);
+      const gradeM = after.match(/\b(HD|DN|DI|D|CR|C|PS|P|FL|F|N|H1|H2A|H2B|H3)\b(?!.*\b(HD|DN|DI|CR|PS|FL)\b)/);
+      const nums = [...after.matchAll(/(?<![\d.])(\d{1,3})(?:\.\d+)?(?![\d.])/g)].map(x => +x[1]).filter(n => n <= 100);
+      const mark = nums.length ? nums[nums.length - 1] : null;
+      if (mark == null) continue;
+      const title = after.replace(/\b20\d\d\b.*$/, "").replace(/\b(T|S|Term|Sem(ester)?)\s?[0-3]\b.*$/i, "").replace(/\d.*$/, "").trim().slice(0, 80);
+      seen.add(code);
+      out.push({ code, title, mark, grade: gradeM ? gradeM[1] : gradeFor(mark) });
+    }
+    return out.sort((a, b) => b.mark - a.mark);
+  }
+
+  /* ---------------- admin ---------------- */
+  async function pageAdmin() {
+    if (!S.profile.is_admin) { app().innerHTML = `<div class="empty">Admins only.</div>`; return; }
+    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">Admin</h1><div class="seg" style="min-width:260px"><label><input type="radio" name="ad" value="apps" checked><span>Applications</span></label><label><input type="radio" name="ad" value="reports"><span>Reports</span></label></div></div><div id="ad-body"></div></section>`;
+    document.querySelectorAll('input[name="ad"]').forEach(r => r.onchange = () => r.value === "apps" ? adminApps() : adminReports());
+    adminApps();
+  }
+  async function adminApps(selected) {
+    const body = $("#ad-body");
+    const { data: apps, error } = await sb.from("tutor_applications").select("*, applicant:profiles!tutor_applications_user_id_fkey(full_name, display_name, uni_id, degree, year_of_study)").eq("status", "pending").order("submitted_at");
+    if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
+    if (!apps.length) { body.innerHTML = `<div class="empty">No applications waiting for review.</div>`; return; }
+    const cur = apps.find(a => a.id === selected) || apps[0];
+    body.innerHTML = `<div class="admin-grid"><div class="col"><div id="ad-doc"></div></div><div class="col">
+      <div class="app-list">${apps.map(a => `<button class="app-item" data-app="${a.id}" aria-current="${a.id === cur.id}"><span><b>${esc(a.applicant ? a.applicant.full_name : "Unknown")}</b><br><span class="muted" style="font-size:13px">${esc(uniShort(a.applicant && a.applicant.uni_id))} · ${ago(a.submitted_at)}</span></span><span class="status-pill pending">Pending</span></button>`).join("")}</div>
+      <div class="panel" id="ad-form"></div></div></div>`;
+    body.querySelectorAll("[data-app]").forEach(b => b.onclick = () => adminApps(b.dataset.app));
+    const { data: tcs } = await sb.from("tutor_courses").select("*").eq("application_id", cur.id).order("mark", { ascending: false });
+    const a = cur.applicant || {};
+    $("#ad-form").innerHTML = `<h2 style="font-size:20px">${esc(a.full_name || "")}</h2>
+      <dl class="kv"><dt>Display name</dt><dd>${esc(a.display_name || "")}</dd><dt>University</dt><dd>${esc(uniName(a.uni_id))}</dd><dt>Degree</dt><dd>${esc(a.degree || "")} · ${esc(a.year_of_study || "")}</dd><dt>My eQuals</dt><dd>${cur.myequals_link ? `<a href="${esc(cur.myequals_link)}" target="_blank" rel="noopener noreferrer">Open share link ↗</a>` : "Not provided"}</dd></dl>
+      <p class="muted" style="font-size:13px">Tick the courses that match the transcript.</p>
+      <div class="table-wrap"><table><thead><tr><th></th><th>Code</th><th>Course</th><th>Mark</th><th>Grade</th></tr></thead><tbody>
+      ${(tcs || []).map(c => `<tr><td><input type="checkbox" data-c="${c.id}" checked aria-label="Approve ${esc(c.code)}"></td><td class="mono">${esc(c.code)}</td><td>${esc(c.title)}</td><td class="num">${c.mark}</td><td>${esc(c.grade || "")}</td></tr>`).join("")}</tbody></table></div>
+      <label class="check"><input type="checkbox" id="ad-eq" ${cur.myequals_link ? "" : "disabled"}> My eQuals link checked and matches</label>
+      <label class="field"><span>Note to applicant (shown if rejected)</span><textarea class="prose" id="ad-notes" style="min-height:60px" maxlength="500"></textarea></label>
+      <div id="st" hidden></div>
+      <div class="row" style="justify-content:space-between"><button class="btn" id="ad-reject">Reject</button><button class="btn primary" id="ad-approve">Approve ticked courses</button></div>`;
+    try {
+      const url = await signedUrl("transcripts", cur.transcript_path);
+      const type = /\.pdf$/i.test(cur.transcript_path) ? "application/pdf" : "image/png";
+      await DocView.mount($("#ad-doc"), { url, type, editable: false });
+    } catch (e) { $("#ad-doc").innerHTML = `<div class="status err">Couldn't open the transcript: ${esc(errMsg(e))}</div>`; }
+    const decide = async approve => {
+      const ids = $$("#ad-form [data-c]").filter(x => x.checked).map(x => +x.dataset.c);
+      if (approve && !ids.length) return status($("#st"), "Tick at least one course, or reject the application.", "err");
+      const { error } = await sb.rpc("admin_review_application", { p_app: cur.id, p_approve: approve, p_equals: $("#ad-eq").checked, p_course_ids: ids, p_notes: $("#ad-notes").value.trim() || null });
+      if (error) return status($("#st"), errMsg(error), "err");
+      toast(approve ? "Approved" : "Rejected"); adminApps();
+    };
+    $("#ad-approve").onclick = () => decide(true);
+    $("#ad-reject").onclick = () => decide(false);
+  }
+  async function adminReports() {
+    const body = $("#ad-body");
+    const { data, error } = await sb.from("reports").select("*, answer:answers(bubbles, tutor_id, question_id, created_at)").order("created_at", { ascending: false }).limit(50);
+    if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
+    body.innerHTML = data.length ? `<div class="col">${data.map(r => `<div class="answer-card"><div class="row" style="justify-content:space-between"><b>Report</b><span class="muted" style="font-size:12px">${ago(r.created_at)}</span></div><p>${esc(r.reason || "")}</p><div class="bubbles">${((r.answer && r.answer.bubbles) || []).map(b => `<div class="bubble">${esc(b)}</div>`).join("")}</div></div>`).join("")}</div>` : `<div class="empty">No reports.</div>`;
+  }
+
+  /* ---------------- boot ---------------- */
+  async function boot() {
+    try { await loadUnis(); } catch (e) { app().innerHTML = `<div class="status err">Couldn't connect to the database. ${esc(errMsg(e))}</div>`; return; }
+    const { data: { session } } = await sb.auth.getSession();
+    S.session = session; S.user = session ? session.user : null;
+    await loadProfile();
+    // Google sign-ups: carry the role picked before redirect
+    const ir = localStorage.getItem("intended-role");
+    if (S.profile && ir && !S.profile.onboarded && !S.profile.intended_role) { await sb.from("profiles").update({ intended_role: ir }).eq("id", S.user.id); S.profile.intended_role = ir; }
+    if (S.user) localStorage.removeItem("intended-role");
+    if (/access_token|error_description|type=recovery/.test(location.hash)) history.replaceState(null, "", location.pathname + "#/");
+    S.ready = true;
+    const after = sessionStorage.getItem("after-login");
+    if (S.user && after) { sessionStorage.removeItem("after-login"); location.hash = after; }
+    route();
+    sb.auth.onAuthStateChange(async (event, session) => {
+      const prevUser = S.user && S.user.id;
+      S.session = session; S.user = session ? session.user : null;
+      if (event === "PASSWORD_RECOVERY") { location.hash = "#/new-password"; return; }
+      if ((S.user && S.user.id) !== prevUser) {
+        await loadProfile();
+        if (event === "SIGNED_IN") { const a = sessionStorage.getItem("after-login"); sessionStorage.removeItem("after-login"); if (a && a !== location.hash) { location.hash = a; return; } if (["#/login", "#/signup", "#/signup/student", "#/signup/tutor", ""].includes(location.hash) || location.hash.startsWith("#/signup")) { location.hash = "#/"; return; } }
+        route();
+      }
+    });
+  }
+  boot();
+})();

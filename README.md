@@ -2,54 +2,79 @@
 
 **Let's succeed as a generation.**
 
-Distinction is a peer-tutoring marketplace for university students. Pick your uni and course, ask a short question, and it goes to students who got a Distinction or High Distinction in that course (and in similar courses at other unis). The first answers get paid.
+Distinction is a peer Q&A marketplace for Australian university students. Pick your uni and course, ask a short question, and it goes to students who got a Distinction or High Distinction in that course (and in similar courses at other unis). Tutors answer in short text messages and by marking up the student's own PDF or image.
 
-> This is a clickable mock prototype. There is no backend: data is stored in your browser, payments and cash-outs are simulated, and answers from example tutors are demo placeholders.
+Live site: https://distinction.onrender.com
 
-## What's in the prototype
+## What's built
 
-**For students (Ask a question)**
-- Choose a university and course from a searchable dropdown, or type any course code
-- Questions are limited to 50 words, with one image or PDF attachment (up to 5 MB)
-- Choose who answers: Distinction and HD, or HD only
-- Optionally require tutors verified through My eQuals
-- Get 2, 3 or 5 answers for a flat credit price
-- Keep the question open for 1 hour up to 1 day; unfilled spots are refunded when it closes
-- Rate each answer out of 5 stars, or report an unhelpful one for a refund
+**Accounts (Supabase Auth)**
+- Sign up and log in with email and password, or Google (Google needs to be switched on in Supabase, see below)
+- Password reset by email
+- Students: name, display name, university, degree, year, current courses, preferred answer language
+- Tutors: a 4-step application covering profile, transcript upload (read automatically from PDFs, editable), My eQuals link and integrity agreement, then submission for review
 
-**For tutors (Tutor profile)**
-- Profile with star rating, reviews, and the courses you can tutor
-- Transcript scanning finds every course you scored 75+ in
-- Claim one question at a time (10-minute hold), then answer it
-- Earn $1.10 per answer, or $1.70 for urgent questions answered within 20 minutes. Most answers take about 3 minutes, so fast tutors can earn up to $34 an hour
-- Weekly bonus and Top Tutor progress
+**Students**
+- Choose from 40 Australian universities and a searchable course list (any course code can be typed and is added to the catalogue)
+- 50-word questions with one PDF or image (up to 5 MB)
+- Distinction and HD, or HD only; optional My eQuals verified tutors; similar courses at other unis
+- 2, 3 or 5 answers; urgent (within 20 minutes) or standard (usually within an hour); open for 1 hour to 1 day
+- See answers as they arrive, view each tutor's markup on your document, rate answers, report problems
 
-## Pricing (prototype)
+**Tutors**
+- Profile with rating, reviews, approved courses and tracked earnings ($1.10 per answer, $1.70 for urgent answers within 20 minutes)
+- Feed of open questions they qualify for, including similar courses at other unis
+- Claim one question at a time (10-minute hold)
+- Answer with up to 10 text messages plus pen, highlighter and text notes drawn on the student's document. No file uploads, and pasting is limited to short snippets, so answers can't be old assignments
 
-1 credit = $1 AUD.
+**Admin**
+- Review queue: view the uploaded transcript next to the claimed courses, approve course by course, confirm My eQuals
+- Reports from students
 
-| Answers | Student pays | + HD only | + Verified only |
-|---|---|---|---|
-| 2 | $3 | +50c | +50c |
-| 3 | $4.50 | +50c | +50c |
-| 5 | $7.50 | +50c | +50c |
+Payments are not built yet. Tutor earnings are tracked in the database for when they are.
 
-Urgent (answers within 20 minutes): +75c per answer, refunded for any answer that takes longer.
+## Project layout
 
-Tutors earn $1.10 per answer, or $1.70 for urgent questions answered within 20 minutes. Unfilled answer spots are refunded when the question closes.
-
-## Run locally
-
-It's a single static page. Open `index.html` in a browser, or serve the folder:
-
-```bash
-python3 -m http.server 8000
+```
+index.html        App shell
+styles.css        Styles
+config.js         Supabase URL and publishable key (safe for browsers; data is protected by row level security)
+js/ui.js          Shared UI helpers (dropdowns, toasts, formatting)
+js/docs.js        PDF and image viewer with drawing and text notes
+js/app.js         Routing, auth and every page
+vendor/           Supabase JS and PDF.js, served locally
+supabase/
+  schema.sql      Tables, security rules, functions and storage buckets
+  seed.sql        40 universities and common courses, with cross-uni equivalents
+  gen_seed.py     Regenerates seed.sql
+prototype.html    The earlier clickable prototype
 ```
 
-## Deploy on Render
+## Database
 
-This repo includes a `render.yaml` blueprint for a Render static site.
+Run `supabase/schema.sql` then `supabase/seed.sql` in the Supabase SQL editor. Both are safe to re-run.
 
-1. In Render, choose **New → Blueprint** (or **New → Static Site**) and connect this repository.
-2. Leave the build command empty and set the publish directory to `.`.
-3. Deploy. Every push to `main` redeploys automatically.
+Security highlights:
+- Row level security on every table
+- Students only see their own questions and the answers to them
+- Tutors only see questions they're approved to answer
+- Transcripts are private to the applicant and admins
+- Tutors can't change their own tutor status, verification or admin flag
+- Answers are submitted through a checked function: one claim at a time, slot limits, message length limits, urgent pay window
+
+Make someone an admin (run once in the SQL editor, after they've signed up):
+
+```sql
+update public.profiles set is_admin = true
+where id = (select id from auth.users where email = 'you@example.com');
+```
+
+## Switching on Google sign-in
+
+1. In Google Cloud Console, create an OAuth client (Web application).
+2. Add the redirect URI shown in Supabase under Authentication → Sign In / Providers → Google.
+3. Paste the client ID and secret into Supabase and enable the provider.
+
+## Deploy
+
+Render serves this repo as a static site (no build step). Every push to `main` redeploys.
