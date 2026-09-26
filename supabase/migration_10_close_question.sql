@@ -3,7 +3,7 @@ create or replace function public.close_question(q_id uuid) returns numeric
 language plpgsql security definer set search_path = public as $$
 declare refunded numeric;
 begin
-  update questions set expires_at = now() - interval '1 second'
+  update questions set expires_at = greatest(created_at + interval '1 microsecond', now())
    where id = q_id and asker_id = auth.uid() and expires_at > now();
   if not found then raise exception 'This question is already closed'; end if;
   delete from claims where question_id = q_id;
