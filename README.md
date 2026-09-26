@@ -63,6 +63,9 @@ Run these in the Supabase SQL editor, in order (all safe to re-run):
 7. `supabase/migration_06_no_welcome_credits.sql`: accounts start at $0; admins can add credits by hand
 8. `supabase/migration_07_free_topups.sql`: temporary free top-ups (switch off in `app_settings`)
 9. `supabase/migration_08_more_courses.sql`: more courses (UNSW first) and a second, broad similarity group. Regenerate with `supabase/gen_more.py`
+10. `supabase/migration_09_hd_only.sql`: HD only option
+11. `supabase/migration_10_close_question.sql`: students can close a question early
+12. `supabase/migration_11_goals.sql`: "What are you after?" (answers, explanation, expertise, experience, check my work, course-specific). Course-specific keeps a question at the student's uni
 
 Add test credits to an account (until payments launch):
 

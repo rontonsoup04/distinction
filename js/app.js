@@ -9,6 +9,17 @@
   const FILE_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
   const YEARS = ["1st year", "2nd year", "3rd year", "4th year", "5th year or later", "Postgraduate"];
   const DURS = [{ value: "1", label: "1 hour" }, { value: "3", label: "3 hours" }, { value: "6", label: "6 hours" }, { value: "12", label: "12 hours" }, { value: "24", label: "1 day", sub: "Most answers" }];
+  // "What are you after?" on the Ask page
+  const GOALS = [
+    { v: "answer", label: "Answers", hint: "Just the answer, quickly" },
+    { v: "explanation", label: "Explanation", hint: "Walk me through why it works" },
+    { v: "expertise", label: "Expertise", hint: "Deeper know-how on the topic" },
+    { v: "experience", label: "Experience", hint: "How you studied it, what the exam or assignment was like" },
+    { v: "check_work", label: "Check my work", hint: "Look over my working or draft and point out mistakes" },
+    { v: "course_specific", label: "Course-specific", hint: "Only tutors from my uni, in this course or a very close one" },
+  ];
+  const goalLabel = v => (GOALS.find(g => g.v === v) || {}).label || v;
+  const goalChips = gs => (gs || []).map(v => `<span class="goalchip${v === "course_specific" ? " uni" : ""}">${esc(goalLabel(v))}</span>`).join("");
   const validCode = c => /^[A-Z0-9]{3,12}$/.test(c || "") && /\d{3}/.test(c || "");
 
   const S = { session: null, user: null, profile: null, unis: [], uniMap: {}, courses: {}, timers: [], ready: false };
@@ -372,6 +383,9 @@
             <div class="seg" role="radiogroup" aria-label="Minimum grade"><label><input type="radio" name="a-grade" value="75" checked><span>Distinction and HD</span></label><label><input type="radio" name="a-grade" value="85"><span>HD only</span></label></div>
             <p class="speed-note" id="a-grade-note">Tutors who got a D or HD in this course, or a similar course at any uni, can see and claim it.</p>
           </div>
+          <fieldset class="field goals"><legend>What are you after? <small class="muted">Tick any</small></legend>
+            <div class="goal-grid">${GOALS.map(g => `<label class="goal"><input type="checkbox" name="a-goal" value="${g.v}"><span><b>${g.label}</b><small>${g.hint}</small></span></label>`).join("")}</div>
+          </fieldset>
           <div class="field">
             <div class="row" style="justify-content:space-between"><label for="a-text" style="font-size:13px;font-weight:500">Your question</label><span class="words" id="a-words">0 / ${WORD_LIMIT} words</span></div>
             <textarea class="prose" id="a-text" style="min-height:76px" placeholder="Keep it short: what you're stuck on and which week or assignment it's from."></textarea>
@@ -400,7 +414,7 @@
       list.sort((a, b) => (mine.includes(b.value) - mine.includes(a.value)) || a.value.localeCompare(b.value));
       courseSel.setOptions(list, mine[0] || null);
     }
-    const uniSel2 = glassSelect($("#a-uni"), { options: uniOpts(), value: p.uni_id, search: "Search universities", hideSub: true, onChange: loadCourses });
+    const uniSel2 = glassSelect($("#a-uni"), { options: uniOpts(), value: p.uni_id, search: "Search universities", hideSub: true, onChange: u => { loadCourses(u); paintReach(); } });
     function paintCost() {
       const n = +document.querySelector('input[name="a-count"]:checked').value, urgent = $("#a-urgent").checked;
       document.querySelectorAll('input[name="a-count"]').forEach(r => r.parentElement.querySelector("em").textContent = money(priceFor(+r.value, urgent)));
@@ -408,11 +422,14 @@
       $("#a-cost").innerHTML = `<small>${n} answers${urgent ? " + urgent" : ""}</small><b class="mono">${money(priceFor(n, urgent))}</b>`;
     }
     document.querySelectorAll('input[name="a-count"], #a-urgent').forEach(el => el.addEventListener("change", paintCost));
-    document.querySelectorAll('input[name="a-grade"]').forEach(el => el.addEventListener("change", () => {
-      $("#a-grade-note").textContent = +document.querySelector('input[name="a-grade"]:checked').value >= 85
-        ? "Only tutors who got an HD (85+) in this course, or a similar course at any uni, can see and claim it. Fewer tutors, so answers may take a little longer."
-        : "Tutors who got a D or HD in this course, or a similar course at any uni, can see and claim it.";
-    }));
+    const goalsPicked = () => [...document.querySelectorAll('input[name="a-goal"]:checked')].map(el => el.value);
+    function paintReach() {
+      const hd = +document.querySelector('input[name="a-grade"]:checked').value >= 85, uniOnly = goalsPicked().includes("course_specific");
+      const who = hd ? "Only tutors who got an HD (85+)" : "Tutors who got a D or HD";
+      const where = uniOnly ? `in this course at ${uniShort(uniSel2.value) || "your uni"}, or a very close course there` : "in this course, or a similar course at any uni";
+      $("#a-grade-note").textContent = `${who} ${where}, can see and claim it.${hd || uniOnly ? " Fewer tutors, so answers may take a little longer." : ""}`;
+    }
+    document.querySelectorAll('input[name="a-grade"], input[name="a-goal"]').forEach(el => el.addEventListener("change", paintReach));
     paintCost();
     await loadCourses(p.uni_id);
     const durSel = glassSelect($("#a-dur"), { options: DURS, value: "24" });
@@ -454,7 +471,7 @@
         const hours = +durSel.value;
         const row = {
           asker_id: S.user.id, uni_id: uni, course_code: code, body: text, ...att,
-          min_mark: +document.querySelector('input[name="a-grade"]:checked').value, verified_only: false, wide: true, urgent: $("#a-urgent").checked,
+          min_mark: +document.querySelector('input[name="a-grade"]:checked').value, verified_only: false, wide: !goalsPicked().includes("course_specific"), goals: goalsPicked(), urgent: $("#a-urgent").checked,
           slots: +document.querySelector('input[name="a-count"]:checked').value,
           expires_at: new Date(Date.now() + hours * 3600e3).toISOString()
         };
@@ -514,7 +531,8 @@
             <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</span></span><span class="q-exp" data-exp="${q.expires_at}">${left(q.expires_at)}</span></div>
             <p class="q-text" style="font-size:17px">${esc(q.body)}</p>
             ${mine && new Date(q.expires_at) > new Date() ? `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">Closes automatically ${left(q.expires_at).replace("Closes in", "in")}. Got what you needed?</span><button class="btn sm" id="close-q">Close question</button></div>` : ""}
-            <div class="q-pay">${[q.urgent ? "Urgent" : null, q.min_mark >= 85 ? "HD only" : "Open to D and HD tutors", "Similar courses included"].filter(Boolean).map(t => `<span class="tagchip">${t}</span>`).join("")}</div>
+            <div class="q-pay">${[q.urgent ? "Urgent" : null, q.min_mark >= 85 ? "HD only" : "Open to D and HD tutors", q.wide === false ? "Your uni only" : "Similar courses included"].filter(Boolean).map(t => `<span class="tagchip">${t}</span>`).join("")}</div>
+            ${(q.goals || []).length ? `<div class="goals-row"><span class="muted">You're after</span>${goalChips(q.goals)}</div>` : ""}
           </article>
           ${q.attachment_path ? `<div class="answer-tabs" id="ann-tabs"></div><div id="doc"></div>` : ""}
         </div>
@@ -801,6 +819,7 @@
         <div style="min-width:0;flex:1"><b data-notr>${esc(q.asker_name)}</b><div class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</div></div>
         <div class="reward-box${eb ? " eb" : ""}">${eb ? `<span class="eb-tag">Urgent</span><b>${money(URGENT_PAY)}</b><small>${mins(ebEnd - now)} min left, then ${money(PAY)}</small>` : `<b>${money(PAY)}</b><small>Reward</small>`}</div></div>
       <div class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="muted" style="font-size:13px">${esc(q.course_title)}</span>${similar ? `<span class="simchip">Similar to your ${esc(q.match_code)}</span>` : ""}${q.min_mark >= 85 ? '<span class="tagchip">HD only</span>' : ""}${q.verified_only ? '<span class="tagchip">Verified only</span>' : ""}</div>
+      ${(q.goals || []).length ? `<div class="goals-row"><span class="muted">After</span>${goalChips(q.goals)}</div>` : ""}
       <div data-trslot><p class="q-text" data-tr>${esc(q.body)}</p></div>
       ${q.attachment_name ? `<span class="fchip">${q.attachment_type === "application/pdf" ? "PDF" : "IMG"} · ${esc(q.attachment_name)} · ${kb(q.attachment_size || 0)}</span>` : ""}
       ${action}
@@ -833,6 +852,7 @@
               <div class="reward-box${eb() ? " eb" : ""}" id="reward"></div></div>
             <div class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="muted" style="font-size:13px">${esc(q.course_title)}</span></div>
             <div data-trslot><p class="q-text" style="font-size:16px" data-tr>${esc(q.body)}</p></div>
+            ${(q.goals || []).length ? `<div class="goals-row"><span class="muted">The student is after</span>${goalChips(q.goals)}</div>` : ""}
           </article>
           <div class="panel" style="gap:12px">
             <div class="row" style="justify-content:space-between"><h3 style="font-size:18px">Your answer</h3><span class="muted" style="font-size:13px" id="claim-state"></span></div>
