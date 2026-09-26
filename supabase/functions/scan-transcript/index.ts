@@ -90,5 +90,11 @@ Deno.serve(async (req) => {
     }))
     .filter((c) => /^[A-Z0-9]{3,12}$/.test(c.code) && Number.isFinite(c.mark) && c.mark >= 0 && c.mark <= 100)
     .slice(0, 80);
+  // Save the scan server-side. Applications use this copy, so marks can't be edited in the browser.
+  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { error: saveErr } = await admin.from("transcript_scans").insert({
+    user_id: user.id, path, courses, name: String(parsed.name ?? "").slice(0, 120), university: String(parsed.university ?? "").slice(0, 120),
+  });
+  if (saveErr) { console.error("save scan", saveErr); return json({ error: "Couldn't save the scan. Try again." }, 500); }
   return json({ name: parsed.name ?? "", university: parsed.university ?? "", courses });
 });

@@ -124,8 +124,8 @@
         </div>
       </div>
       <div class="two-up">
-        <div class="panel feature"><span class="eyebrow">For students</span><h2>Answers from people who aced your course</h2><ul><li>Pick your uni and course from 40 Australian universities</li><li>50-word questions with one PDF or image</li><li>Choose HD only or Distinction and up, and My eQuals verified tutors</li><li>Get 2, 3 or 5 answers. Rate each one.</li></ul><a class="btn primary" href="#/signup/student" style="align-self:flex-start">Sign up as a student</a></div>
-        <div class="panel feature"><span class="eyebrow">For tutors</span><h2>Earn up to $34 an hour from your phone</h2><ul><li>Upload your transcript. We check it and approve your D and HD courses.</li><li>Claim a question, then answer with text and by drawing on the student's document</li><li>$1.10 per answer, $1.70 for urgent questions answered within 20 minutes</li></ul><a class="btn" href="#/signup/tutor" style="align-self:flex-start">Apply to tutor</a></div>
+        <div class="panel feature"><span class="eyebrow">For students</span><h2>Answers from people who aced your course</h2><ul><li>Pick your uni and course from 40 Australian universities</li><li>50-word questions with one PDF or image</li><li>Choose HD only or Distinction and up. Every tutor is verified through My eQuals.</li><li>Get 2, 3 or 5 answers. Rate each one.</li></ul><a class="btn primary" href="#/signup/student" style="align-self:flex-start">Sign up as a student</a></div>
+        <div class="panel feature"><span class="eyebrow">For tutors</span><h2>Earn up to $34 an hour from your phone</h2><ul><li>Upload your transcript and share it from My eQuals. We approve your D and HD courses.</li><li>Claim a question, then answer with text and by drawing on the student's document</li><li>$1.10 per answer, $1.70 for urgent questions answered within 20 minutes</li></ul><a class="btn" href="#/signup/tutor" style="align-self:flex-start">Apply to tutor</a></div>
       </div>
     </section>`;
   }
@@ -312,7 +312,7 @@
           <p>Your question goes to students who got a High Distinction (or a Distinction, if you choose) in that course, and in similar courses at other unis. Standard questions are usually answered within an hour. Tick Urgent for answers within 20 minutes.</p>
           <div class="how" style="margin-top:22px">
             <div><span class="stepno">1 · PICK</span><b>Uni and course</b><p>It reaches people who aced that course, plus similar courses elsewhere if you want faster answers.</p></div>
-            <div><span class="stepno">2 · CHOOSE</span><b>Who answers</b><p>Distinction and up, or HD only. Add My eQuals verification if you want extra certainty.</p></div>
+            <div><span class="stepno">2 · CHOOSE</span><b>Who answers</b><p>Distinction and up, or HD only. Every tutor is verified through My eQuals.</p></div>
             <div><span class="stepno">3 · GET</span><b>Answers</b><p>Tutors reply in short messages and can mark up your PDF or image directly.</p></div>
           </div>
           <a class="recruit" href="#/tutor"><span><b>Got an HD?</b> Earn up to $34 an hour answering quick questions in the courses you aced.</span><span class="recruit-go">Start earning →</span></a>
@@ -330,7 +330,7 @@
           </div>
           <div class="field"><span>Who can answer</span>
             <div class="seg" role="radiogroup" aria-label="Minimum grade"><label><input type="radio" name="a-grade" value="75" checked><span>Distinction and HD</span></label><label><input type="radio" name="a-grade" value="85"><span>HD only</span></label></div>
-            <label class="check"><input type="checkbox" id="a-verified"> Only students verified by My eQuals</label>
+            <p class="speed-note">Every tutor is verified through My eQuals.</p>
           </div>
           <div class="field"><span>How many answers</span>
             <div class="boxes" role="radiogroup" aria-label="Number of answers">
@@ -394,7 +394,7 @@
         const row = {
           asker_id: S.user.id, uni_id: uni, course_code: code, body: text, ...att,
           min_mark: +document.querySelector('input[name="a-grade"]:checked').value,
-          verified_only: $("#a-verified").checked, wide: $("#a-wide").checked, urgent: $("#a-urgent").checked,
+          verified_only: false, wide: $("#a-wide").checked, urgent: $("#a-urgent").checked,
           slots: +document.querySelector('input[name="a-count"]:checked').value,
           expires_at: new Date(Date.now() + hours * 3600e3).toISOString()
         };
@@ -447,7 +447,7 @@
           <article class="q">
             <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</span></span><span class="q-exp" data-exp="${q.expires_at}">${left(q.expires_at)}</span></div>
             <p class="q-text" style="font-size:17px">${esc(q.body)}</p>
-            <div class="q-pay">${[q.urgent ? "Urgent" : null, q.min_mark >= 85 ? "HD only" : "Distinction and HD", q.verified_only ? "My eQuals verified" : null, q.wide ? "Similar courses included" : null].filter(Boolean).map(t => `<span class="tagchip">${t}</span>`).join("")}</div>
+            <div class="q-pay">${[q.urgent ? "Urgent" : null, q.min_mark >= 85 ? "HD only" : "Distinction and HD", q.wide ? "Similar courses included" : null].filter(Boolean).map(t => `<span class="tagchip">${t}</span>`).join("")}</div>
           </article>
           ${q.attachment_path ? `<div class="answer-tabs" id="ann-tabs"></div><div id="doc"></div>` : ""}
         </div>
@@ -537,7 +537,7 @@
       <h1>Turn your best marks into up to $34 an hour.</h1>
       <p>Upload your transcript and we'll check it. Every course where you got a Distinction (75+) or High Distinction becomes a course you can tutor. Then answer short questions from students for $1.10 each, or $1.70 for urgent questions answered within 20 minutes. Most take about 3 minutes.</p>
       <div class="cta-row"><a class="btn primary" href="#/tutor/apply">Apply to tutor</a></div></div>
-      <div class="how"><div><span class="stepno">STEP 1</span><b>Profile</b><p>Your uni, degree and a short intro.</p></div><div><span class="stepno">STEP 2</span><b>Transcript</b><p>Upload it. We read your marks and you check them.</p></div><div><span class="stepno">STEP 3</span><b>Review</b><p>We confirm your transcript, usually within 48 hours.</p></div></div>
+      <div class="how"><div><span class="stepno">STEP 1</span><b>Profile</b><p>Your uni, degree and a short intro.</p></div><div><span class="stepno">STEP 2</span><b>Transcript</b><p>Upload it and share it from My eQuals. We read your marks automatically.</p></div><div><span class="stepno">STEP 3</span><b>Review</b><p>We confirm your transcript, usually within 48 hours.</p></div></div>
     </div></section>`;
   }
   async function tutorPending() {
@@ -751,7 +751,7 @@
     }
     function step2() {
       $("#body").innerHTML = `<h2>Upload your transcript</h2>
-        <p class="muted" style="font-size:14px">Upload your official academic transcript as a PDF or screenshot. We'll try to read your courses and marks, and you can fix anything we get wrong. Our team checks every transcript before approving.</p>
+        <p class="muted" style="font-size:14px">Upload your official academic transcript or statement as a PDF or screenshot. We read your courses and marks straight from it. Marks can't be typed in or changed, and our team checks every transcript before approving.</p>
         <label class="drop" id="drop" for="tfile"><strong>${A.file ? esc(A.file.name) : "Drop your transcript here"}</strong><span class="muted" style="font-size:14px">PDF or image, up to 10 MB. Or click to choose a file.</span><input type="file" id="tfile" accept="${FILE_TYPES.join(",")}" hidden></label>
         <div id="st" hidden></div>
         <div id="tbl"></div>
@@ -761,57 +761,49 @@
       ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
       drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) take(f); });
       $("#tfile").onchange = e => { const f = e.target.files[0]; if (f) take(f); };
+      let busy = false;
       async function take(f) {
+        if (busy) return;
         if (!FILE_TYPES.includes(f.type)) return status($("#st"), "Upload a PDF or an image (PNG, JPG or WebP).", "err");
         if (f.size > 10 * 1024 * 1024) return status($("#st"), "That file is over 10 MB.", "err");
-        A.file = f; A.path = null; drop.querySelector("strong").textContent = f.name;
+        busy = true; $("#next").disabled = true;
+        A.file = f; A.path = null; A.courses = []; A.scanned = false; drop.querySelector("strong").textContent = f.name; table();
         status($("#st"), "Uploading your transcript…", "", true);
         const path = `${S.user.id}/${Date.now()}-${f.name.replace(/[^\w.\-]+/g, "_").slice(-80)}`;
         const up = await sb.storage.from("transcripts").upload(path, f, { contentType: f.type });
-        if (up.error) { A.file = null; return status($("#st"), errMsg(up.error), "err"); }
+        if (up.error) { A.file = null; busy = false; $("#next").disabled = false; return status($("#st"), errMsg(up.error), "err"); }
         A.path = path;
         status($("#st"), "Reading your courses and marks. This takes about 10 to 20 seconds…", "", true);
-        let found = [];
         try {
           const { data, error } = await sb.functions.invoke("scan-transcript", { body: { path } });
-          if (!error && data && Array.isArray(data.courses)) found = data.courses.map(c => ({ code: c.code, title: c.title, mark: c.mark, grade: c.grade || gradeFor(c.mark) }));
-        } catch (e) { /* fall back below */ }
-        if (!found.length && f.type === "application/pdf") { try { found = parseTranscript(await pdfText(f)); } catch (e) { } }
-        found.sort((a, b) => b.mark - a.mark);
-        if (found.length) { A.courses = found; status($("#st"), `Found ${found.length} courses. Check the marks below and fix anything that's wrong.`, "ok"); }
-        else { A.courses = [{ code: "", title: "", mark: "", grade: "" }]; status($("#st"), "We couldn't read courses from this file. Add them below and we'll check them against your transcript.", "err"); }
+          if (!error && data && Array.isArray(data.courses)) { A.courses = data.courses.sort((a, b) => b.mark - a.mark); A.scanned = true; }
+        } catch (e) { /* handled below */ }
+        busy = false; $("#next").disabled = false;
+        const n = A.courses.filter(c => c.mark >= 75).length;
+        if (A.courses.length) status($("#st"), `We read ${A.courses.length} courses from your transcript. ${n} ${n === 1 ? "has" : "have"} a mark of 75 or more and will be sent for approval.`, "ok");
+        else status($("#st"), "We couldn't read your courses automatically. You can still continue: our team will read them from your transcript during review.", "");
         table();
       }
       function table() {
-        if (!A.file) { $("#tbl").innerHTML = ""; return; }
-        $("#tbl").innerHTML = `<div class="table-wrap"><table class="tx-table"><thead><tr><th>Course code</th><th>Course name</th><th>Mark</th><th>Grade</th><th></th></tr></thead><tbody>
-          ${A.courses.map((c, i) => `<tr class="${+c.mark >= 75 ? "" : "ineligible"}"><td><input type="text" data-f="code" data-i="${i}" value="${esc(c.code)}" aria-label="Course code" style="text-transform:uppercase;font-family:var(--mono)"></td><td><input type="text" data-f="title" data-i="${i}" value="${esc(c.title)}" aria-label="Course name"></td><td class="num"><input type="number" min="0" max="100" data-f="mark" data-i="${i}" value="${esc(c.mark)}" aria-label="Mark"></td><td><input type="text" data-f="grade" data-i="${i}" value="${esc(c.grade)}" aria-label="Grade" style="width:60px"></td><td><button class="btn ghost sm" data-del="${i}" aria-label="Remove row">×</button></td></tr>`).join("")}
+        if (!A.courses.length) { $("#tbl").innerHTML = ""; return; }
+        $("#tbl").innerHTML = `<div class="table-wrap"><table><thead><tr><th>Code</th><th>Course</th><th>Mark</th><th>Grade</th><th></th></tr></thead><tbody>
+          ${A.courses.map(c => `<tr class="${c.mark >= 75 ? "" : "ineligible"}"><td class="mono">${esc(c.code)}</td><td>${esc(c.title)}</td><td class="num">${c.mark}</td><td><span class="badge ${gcls(c.grade || gradeFor(c.mark))}">${esc(c.grade || gradeFor(c.mark))}</span></td><td>${c.mark >= 75 ? '<span class="elig yes">Can tutor</span>' : '<span class="elig">Below 75</span>'}</td></tr>`).join("")}
           </tbody></table></div>
-          <div class="row" style="justify-content:space-between"><button class="btn sm" id="addrow">+ Add a course</button><span class="muted" style="font-size:13px"><b>${A.courses.filter(c => +c.mark >= 75).length}</b> course${A.courses.filter(c => +c.mark >= 75).length === 1 ? "" : "s"} at 75 or above will be sent for approval</span></div>`;
-        $("#tbl").oninput = e => { const f = e.target.dataset.f, i = e.target.dataset.i; if (f) { A.courses[+i][f] = f === "code" ? e.target.value.toUpperCase().replace(/\s/g, "") : e.target.value; } };
-        $("#tbl").onchange = e => { if (e.target.dataset.f === "mark") table(); };
-        $("#tbl").onclick = e => { const d = e.target.closest("[data-del]"); if (d) { A.courses.splice(+d.dataset.del, 1); table(); } if (e.target.id === "addrow") { A.courses.push({ code: "", title: "", mark: "", grade: "" }); table(); } };
+          <p class="muted" style="font-size:13px">Something missing or wrong? Continue anyway. Our reviewer checks your transcript and can add courses the scan missed.</p>`;
       }
       table();
       $("#back").onclick = () => { A.step = 1; render(); };
-      $("#next").onclick = async () => {
-        if (!A.file) return status($("#st"), "Upload your transcript first.", "err");
-        const good = A.courses.filter(c => c.code && validCode(c.code) && c.mark !== "" && +c.mark >= 75 && +c.mark <= 100);
-        if (!good.length) return status($("#st"), "Add at least one course with a mark of 75 or more, and a valid course code.", "err");
-        if (!A.path) {
-          status($("#st"), "Uploading your transcript…", "", true);
-          const path = `${S.user.id}/${Date.now()}-${A.file.name.replace(/[^\w.\-]+/g, "_").slice(-80)}`;
-          const { error } = await sb.storage.from("transcripts").upload(path, A.file, { contentType: A.file.type });
-          if (error) return status($("#st"), errMsg(error), "err");
-          A.path = path;
-        }
+      $("#next").onclick = () => {
+        if (busy) return;
+        if (!A.path) return status($("#st"), "Upload your transcript first.", "err");
         A.step = 3; render();
       };
     }
     function step3() {
-      const rules = ["I'll explain concepts in my own words and won't complete assessable work for students.", "I won't share past assignments, exam answers or files. I'll only answer with text and markup on the student's document.", "The marks I entered match my official transcript."];
-      $("#body").innerHTML = `<h2>Verification</h2>
-        <label class="field"><span>My eQuals share link (optional, recommended)</span><input type="url" id="eq" value="${esc(A.myequals)}" placeholder="https://www.myequals.edu.au/…"><small>Share your official transcript from My eQuals to get the verified badge. Some students only accept answers from verified tutors.</small></label>
+      const rules = ["I'll explain concepts in my own words and won't complete assessable work for students.", "I won't share past assignments, exam answers or files. I'll only answer with text and markup on the student's document.", "The transcript I uploaded is my own, official and unedited."];
+      $("#body").innerHTML = `<h2>My eQuals verification</h2>
+        <p class="muted" style="font-size:14px">Every Distinction tutor is verified through My eQuals, the official digital transcript service used by Australian universities. Share your transcript from My eQuals and paste the link here. We use it to confirm your uploaded transcript is genuine.</p>
+        <label class="field"><span>My eQuals share link</span><input type="url" id="eq" value="${esc(A.myequals)}" placeholder="https://www.myequals.edu.au/…" required><small>In My eQuals, open your academic transcript, choose Share, create a link and copy it.</small></label>
         <div class="agree">${rules.map((r, i) => `<label class="check"><input type="checkbox" data-ag="${i}" ${A.agree[i] ? "checked" : ""}><span>${r}</span></label>`).join("")}</div>
         <div id="st" hidden></div>
         <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="next">Continue</button></div>`;
@@ -819,22 +811,23 @@
       $("#back").onclick = () => { A.myequals = $("#eq").value.trim(); A.step = 2; render(); };
       $("#next").onclick = () => {
         A.myequals = $("#eq").value.trim();
-        if (A.myequals && !/^https:\/\/([\w-]+\.)*myequals\.(edu\.au|net)\//i.test(A.myequals)) return status($("#st"), "That doesn't look like a My eQuals link. Leave it blank or paste the share link from My eQuals.", "err");
+        if (!A.myequals) return status($("#st"), "Paste your My eQuals share link. It's required for every tutor.", "err");
+        if (!/^https:\/\/([\w-]+\.)*myequals\.(edu\.au|net)\//i.test(A.myequals)) return status($("#st"), "That doesn't look like a My eQuals link. It should start with https://www.myequals.edu.au/", "err");
         if (A.agree.some(x => !x)) return status($("#st"), "Tick all three boxes to continue.", "err");
         A.step = 4; render();
       };
     }
     function step4() {
-      const good = A.courses.filter(c => c.code && validCode(c.code) && +c.mark >= 75 && +c.mark <= 100);
+      const good = A.courses.filter(c => c.mark >= 75);
       $("#body").innerHTML = `<h2>Review and submit</h2>
-        <dl class="kv"><dt>Name</dt><dd>${esc(S.profile.full_name || "")} (${esc(S.profile.display_name || "")})</dd><dt>University</dt><dd>${esc(uniName(S.profile.uni_id))}</dd><dt>Degree</dt><dd>${esc(S.profile.degree || "")}</dd><dt>Transcript</dt><dd>${esc(A.file.name)}</dd><dt>My eQuals</dt><dd>${A.myequals ? "Link provided" : "Not provided"}</dd></dl>
-        <ul class="courses">${good.map(c => `<li><span class="code">${esc(c.code)}</span><span class="ttl">${esc(c.title)}</span><span class="grade">${+c.mark}<span class="badge ${gcls(c.grade || gradeFor(+c.mark))}">${esc(c.grade || gradeFor(+c.mark))}</span></span></li>`).join("")}</ul>
+        <dl class="kv"><dt>Name</dt><dd>${esc(S.profile.full_name || "")} (${esc(S.profile.display_name || "")})</dd><dt>University</dt><dd>${esc(uniName(S.profile.uni_id))}</dd><dt>Degree</dt><dd>${esc(S.profile.degree || "")}</dd><dt>Transcript</dt><dd>${esc(A.file.name)}</dd><dt>My eQuals</dt><dd>Link provided</dd></dl>
+        ${good.length ? `<p style="font-size:14px"><b>Courses sent for approval</b></p><ul class="courses">${good.map(c => `<li><span class="code">${esc(c.code)}</span><span class="ttl">${esc(c.title)}</span><span class="grade">${c.mark}<span class="badge ${gcls(c.grade || gradeFor(c.mark))}">${esc(c.grade || gradeFor(c.mark))}</span></span></li>`).join("")}</ul>` : `<div class="status">Our reviewer will read your courses from your transcript and approve the ones at 75 or above.</div>`}
         <div id="st" hidden></div>
         <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="go">Submit application</button></div>`;
       $("#back").onclick = () => { A.step = 3; render(); };
       $("#go").onclick = async () => {
         $("#go").disabled = true; status($("#st"), "Submitting…", "", true);
-        const { error } = await sb.rpc("submit_tutor_application", { p_transcript_path: A.path, p_transcript_name: A.file.name, p_myequals: A.myequals, p_courses: good.map(c => ({ code: c.code, title: c.title, mark: +c.mark, grade: (c.grade || gradeFor(+c.mark)).toUpperCase() })) });
+        const { error } = await sb.rpc("submit_tutor_application", { p_transcript_path: A.path, p_transcript_name: A.file.name, p_myequals: A.myequals });
         if (error) { $("#go").disabled = false; return status($("#st"), errMsg(error), "err"); }
         await loadProfile(); renderHeader(); toast("Application submitted"); location.hash = "#/tutor";
       };
@@ -905,7 +898,8 @@
       <p class="muted" style="font-size:13px">Tick the courses that match the transcript.</p>
       <div class="table-wrap"><table><thead><tr><th></th><th>Code</th><th>Course</th><th>Mark</th><th>Grade</th></tr></thead><tbody>
       ${(tcs || []).map(c => `<tr><td><input type="checkbox" data-c="${c.id}" checked aria-label="Approve ${esc(c.code)}"></td><td class="mono">${esc(c.code)}</td><td>${esc(c.title)}</td><td class="num">${c.mark}</td><td>${esc(c.grade || "")}</td></tr>`).join("")}</tbody></table></div>
-      <label class="check"><input type="checkbox" id="ad-eq" ${cur.myequals_link ? "" : "disabled"}> My eQuals link checked and matches</label>
+      <details><summary style="cursor:pointer;font-size:14px;font-weight:500">Add a course the scan missed</summary><div class="row" style="margin-top:8px"><input type="text" id="ad-code" placeholder="Code" style="width:110px;font-family:var(--mono);text-transform:uppercase"><input type="text" id="ad-title" placeholder="Course name" style="flex:1;min-width:140px"><input type="number" id="ad-mark" placeholder="Mark" min="75" max="100" style="width:80px"><input type="text" id="ad-grade" placeholder="Grade" style="width:70px"><button class="btn sm" id="ad-add">Add</button></div></details>
+      <label class="check"><input type="checkbox" id="ad-eq"> I opened the My eQuals link and it matches the uploaded transcript</label>
       <label class="field"><span>Note to applicant (shown if rejected)</span><textarea class="prose" id="ad-notes" style="min-height:60px" maxlength="500"></textarea></label>
       <div id="st" hidden></div>
       <div class="row" style="justify-content:space-between"><button class="btn" id="ad-reject">Reject</button><button class="btn primary" id="ad-approve">Approve ticked courses</button></div>`;
@@ -921,7 +915,12 @@
       if (error) return status($("#st"), errMsg(error), "err");
       toast(approve ? "Approved" : "Rejected"); adminApps();
     };
-    $("#ad-approve").onclick = () => decide(true);
+    $("#ad-add").onclick = async () => {
+      const { error } = await sb.rpc("admin_add_course", { p_app: cur.id, p_code: $("#ad-code").value.trim(), p_title: $("#ad-title").value.trim(), p_mark: +$("#ad-mark").value, p_grade: $("#ad-grade").value.trim() });
+      if (error) return status($("#st"), errMsg(error), "err");
+      toast("Course added"); adminApps(cur.id);
+    };
+    $("#ad-approve").onclick = () => { if (!$("#ad-eq").checked) return status($("#st"), "Open the My eQuals link and confirm it matches before approving.", "err"); decide(true); };
     $("#ad-reject").onclick = () => decide(false);
   }
   async function adminReports() {
