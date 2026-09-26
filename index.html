@@ -386,6 +386,15 @@ tr.ineligible td{color:var(--muted)}
   .search-box input{font-size:17px}
 }
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
+/* stable layout: long dropdown values truncate instead of resizing columns */
+.intro{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}
+.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.field,.gsel,.gsel-btn{min-width:0}
+.gsel-val{flex:1}
+.gsel-val>span:first-child{flex:none}
+.gsel-sub{min-width:0}
+@media (max-width:820px){.intro,.two{grid-template-columns:minmax(0,1fr)}}
+
 </style>
 </head>
 <body>
@@ -418,7 +427,7 @@ tr.ineligible td{color:var(--muted)}
         <div><span class="stepno">2 · CHOOSE</span><b>Who answers</b><p>Distinction and up, or HD only. Add My eQuals verification if you want extra certainty.</p></div>
         <div><span class="stepno">3 · GET</span><b>Fast answers</b><p>One flat price. Spots nobody fills are refunded when the question closes.</p></div>
       </div>
-      <a class="recruit" href="#tutor" data-go="tutor"><span><b>Got an HD?</b> Earn up to $50 an hour answering questions in the courses you aced.</span><span class="recruit-go">Start earning →</span></a>
+      <a class="recruit" href="#tutor" data-go="tutor"><span><b>Got an HD?</b> Earn up to $25 an hour answering questions in the courses you aced.</span><span class="recruit-go">Start earning →</span></a>
     </div>
     <div class="panel composer">
       <div class="two tight">
@@ -440,16 +449,16 @@ tr.ineligible td{color:var(--muted)}
         <span>Who can answer</span>
         <div class="seg" role="radiogroup" aria-label="Minimum grade">
           <label><input type="radio" name="a-grade" value="75" checked><span>Distinction and HD</span></label>
-          <label><input type="radio" name="a-grade" value="85"><span>HD only <em class="plus-cr">+2</em></span></label>
+          <label><input type="radio" name="a-grade" value="85"><span>HD only <em class="plus-cr">+$1</em></span></label>
         </div>
-        <label class="check"><input type="checkbox" id="a-verified"> Only students verified by My eQuals <em class="plus-cr">+2</em></label>
+        <label class="check"><input type="checkbox" id="a-verified"> Only students verified by My eQuals <em class="plus-cr">+$1</em></label>
       </div>
       <div class="field">
         <span>How many answers</span>
         <div class="boxes" role="radiogroup" aria-label="Number of answers">
-          <label><input type="radio" name="a-count" value="2" checked><span class="box"><b>2</b><small>answers</small><em>5 cr</em></span></label>
-          <label><input type="radio" name="a-count" value="3"><span class="box"><b>3</b><small>answers</small><em>7 cr</em></span></label>
-          <label><input type="radio" name="a-count" value="5"><span class="box"><b>5</b><small>answers</small><em>10 cr</em></span></label>
+          <label><input type="radio" name="a-count" value="2" checked><span class="box"><b>2</b><small>answers</small><em>$6</em></span></label>
+          <label><input type="radio" name="a-count" value="3"><span class="box"><b>3</b><small>answers</small><em>$9</em></span></label>
+          <label><input type="radio" name="a-count" value="5"><span class="box"><b>5</b><small>answers</small><em>$14</em></span></label>
         </div>
       </div>
       <div class="post-row">
@@ -470,8 +479,8 @@ tr.ineligible td{color:var(--muted)}
 <section class="view" id="v-teach" hidden>
   <div class="intro">
     <div>
-      <h1>Turn your best marks into up to $50 an hour.</h1>
-      <p>Upload your transcript and our AI reads every course and mark. Anything at Distinction (75+) or above becomes a course you can tutor. Then answer short questions from students for $3 to $5 each, whenever you have a spare few minutes.</p>
+      <h1>Turn your best marks into up to $25 an hour.</h1>
+      <p>Upload your transcript and our AI reads every course and mark. Anything at Distinction (75+) or above becomes a course you can tutor. Then answer short questions from students for $2 each, or $2.50 if you answer within 20 minutes, whenever you have a spare few minutes.</p>
     </div>
     <div class="how">
       <div><span class="stepno">STEP 1</span><b>Upload</b><p>PDF, screenshot or pasted text of your transcript.</p></div>
@@ -533,7 +542,7 @@ tr.ineligible td{color:var(--muted)}
     <label class="field"><span>Short intro</span><textarea class="prose" id="p-bio" placeholder="What you're good at explaining and how you like to help."></textarea></label>
     <div class="two">
       <label class="field"><span>Price per question (credits)</span><input type="number" id="p-q" min="1" max="20" value="2"><small>Students send a written question and you reply in text.</small></label>
-      <label class="field"><span>Price per 30-minute video call (credits)</span><input type="number" id="p-c" min="2" max="40" value="10"><small>1 credit is $2.50, so 10 credits is $25.</small></label>
+      <label class="field"><span>Price per 30-minute video call (credits)</span><input type="number" id="p-c" min="2" max="40" value="10"><small>1 credit is $1.</small></label>
     </div>
     <div class="row"><button class="btn primary" id="go-live">Publish profile</button><span id="pub-note" class="muted" style="font-size:14px"></span></div>
   </div>
@@ -550,7 +559,7 @@ tr.ineligible td{color:var(--muted)}
     <div class="panel">
       <div class="eyebrow">Your balance</div>
       <div><span class="balance" id="bal-big">0</span> <span class="muted">credits</span></div>
-      <p class="muted" style="font-size:14px">Spend credits on questions, video calls and posting ideas for testing. Earn them by tutoring and testing other students' ideas.</p>
+      <p class="muted" style="font-size:14px">1 credit = $1. Spend credits on questions, video calls and posting ideas for testing. Earn them by tutoring and testing other students' ideas.</p>
       <div class="eyebrow" style="margin-top:6px">Buy credits</div>
       <div class="packs" id="packs"></div>
       <small class="muted">Prototype: purchases add credits instantly and no payment is taken.</small>
@@ -575,7 +584,7 @@ tr.ineligible td{color:var(--muted)}
 (function(){
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const KEY="distinction-demo-v5";
+const KEY="distinction-demo-v6";
 
 /* Starter course lists per uni. Replace with real handbook data. */
 const UNIS={
@@ -634,7 +643,7 @@ function seed(){
     ],
     sessions:[],
     tx:[{label:"Welcome bonus",amt:20,at:Date.now()}],
-    earnings:14,earnedTotal:97,payouts:[]
+    earnings:9.5,earnedTotal:64,payouts:[]
   };
 }
 const ERD_SVG="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='360' height='170' viewBox='0 0 360 170'><rect width='360' height='170' fill='#fff'/><g font-family='monospace' font-size='12' fill='#222'><rect x='16' y='24' width='130' height='112' fill='none' stroke='#222'/><text x='26' y='44' font-weight='bold'>ENROLMENT</text><line x1='16' y1='52' x2='146' y2='52' stroke='#222'/><text x='26' y='72'>StudentID (PK)</text><text x='26' y='92'>CourseCode</text><text x='26' y='112'>CourseTitle</text><rect x='214' y='34' width='130' height='80' fill='none' stroke='#222'/><text x='224' y='54' font-weight='bold'>COURSE</text><line x1='214' y1='62' x2='344' y2='62' stroke='#222'/><text x='224' y='82'>CourseCode (PK)</text><text x='224' y='102'>Title</text><line x1='146' y1='88' x2='214' y2='76' stroke='#222' stroke-dasharray='4 3'/><text x='150' y='156' fill='#b00'>is this 3NF?</text></g></svg>`);
@@ -808,7 +817,7 @@ $("#p-uni").innerHTML=Object.entries(UNIS).map(([k,u])=>`<option value="${k}">${
 function loadMyProfile(){const me=S.tutors.find(t=>t.id==="me");if(!me)return;$("#p-uni").value=me.uni||"UNSW";$("#p-eq").value=me.eqLink||"";$("#p-name").value=me.name;$("#p-prog").value=me.program;$("#p-bio").value=me.bio;$("#p-q").value=me.q;$("#p-c").value=me.call}
 
 /* WALLET */
-const PACKS=[{cr:10,price:"$25"},{cr:25,price:"$59",note:"Save $3.50"},{cr:60,price:"$135",note:"Save $15"}];
+const PACKS=[{cr:10,price:"$10"},{cr:21,price:"$20",note:"+1 bonus credit"},{cr:55,price:"$50",note:"+5 bonus credits"}];
 $("#packs").innerHTML=PACKS.map((p,i)=>`<button class="pack" data-pack="${i}"><b>${p.cr}</b><span>credits · ${p.price}</span><small>${p.note||"Starter"}</small></button>`).join("");
 $("#packs").addEventListener("click",e=>{const b=e.target.closest("[data-pack]");if(!b)return;const p=PACKS[+b.dataset.pack];addTx(`Bought ${p.cr} credits (${p.price})`,p.cr);renderWallet();toast(`Added ${p.cr} credits`)});
 function renderWallet(){
@@ -887,7 +896,7 @@ function glassSelect(el,cfg){
 }
 
 /* composer */
-const PRICE={2:5,3:7,5:10},HD_EXTRA=2,EQ_EXTRA=2;
+const PRICE={2:6,3:9,5:14},HD_EXTRA=1,EQ_EXTRA=1;
 const DURS=[{value:"1",label:"1 hour"},{value:"3",label:"3 hours"},{value:"6",label:"6 hours"},{value:"12",label:"12 hours"},{value:"24",label:"1 day",sub:"Most answers"}];
 const courseOpts=uni=>Object.entries(UNIS[uni].courses).map(([k,t])=>({value:k,label:k,sub:t}));
 const uniSel=glassSelect($("#a-uni"),{options:Object.entries(UNIS).map(([k,u])=>({value:k,label:u.name})),value:"UNSW",onChange:v=>{courseSel.setOptions(courseOpts(v),Object.keys(UNIS[v].courses)[0]);composer()}});
@@ -926,11 +935,11 @@ function composer(){
   const d=draft();
   const w=words($("#a-text").value);
   const wl=$("#a-words");wl.textContent=`${w} / ${WORD_LIMIT} words`;wl.classList.toggle("over",w>WORD_LIMIT);
-  document.querySelectorAll('input[name="a-count"]').forEach(r=>{r.parentElement.querySelector("em").textContent=`${priceFor(+r.value,d.minMark,d.verifiedOnly)} cr`});
-  const parts=[`${d.count} answers · ${PRICE[d.count]}`];
-  if(d.minMark>=85)parts.push(`HD only · +${HD_EXTRA}`);
-  if(d.verifiedOnly)parts.push(`Verified · +${EQ_EXTRA}`);
-  $("#a-cost").innerHTML=`<small>${parts.join(" + ")}</small><b class="mono">${d.cost} credits</b>`;
+  document.querySelectorAll('input[name="a-count"]').forEach(r=>{r.parentElement.querySelector("em").textContent=`$${priceFor(+r.value,d.minMark,d.verifiedOnly)}`});
+  const parts=[`${d.count} answers · $${PRICE[d.count]}`];
+  if(d.minMark>=85)parts.push(`HD only · +$${HD_EXTRA}`);
+  if(d.verifiedOnly)parts.push(`Verified · +$${EQ_EXTRA}`);
+  $("#a-cost").innerHTML=`<small>${parts.join(" + ")}</small><b class="mono">$${d.cost}</b>`;
 }
 
 $("#a-post").onclick=()=>{
@@ -1037,8 +1046,9 @@ $("#my-qs").addEventListener("click",e=>{
 
 const initials=n=>n.split(/\s+/).map(w=>w[0]).join("").slice(0,2).toUpperCase();
 /* TUTOR PROFILE */
-const EB_MIN=20,CLAIM_MIN=10,EB_BONUS=1,MAX_HOURLY=50,WEEKLY_GOAL=20,WEEKLY_BONUS=10;
-const rewardOf=q=>q.reward||((q.minMark>=85||q.verifiedOnly)?4:3);
+const EB_MIN=20,CLAIM_MIN=10,EB_BONUS=0.5,MAX_HOURLY=25,WEEKLY_GOAL=20,WEEKLY_BONUS=5;
+const money=n=>"$"+(Math.round(n*100)%100?n.toFixed(2):String(Math.round(n)));
+const rewardOf=q=>2;
 const ebPay=q=>rewardOf(q)+EB_BONUS;
 const ebEnd=q=>q.at+EB_MIN*60e3;
 const ebLeft=q=>ebEnd(q)-Date.now();
@@ -1065,7 +1075,7 @@ function tqCard(q){
   const spots=q.slots-q.answers.length;
   const tags=[q.minMark>=85?"HD only":null,q.verifiedOnly?"Verified only":null].filter(Boolean);
   let action;
-  if(mineIdx>=0){const a=q.answers[mineIdx];action=`<div class="elig yes">✓ You answered ${ORD[mineIdx]} and earned $${a.payout}${a.early?" (early bird)":""}</div>`}
+  if(mineIdx>=0){const a=q.answers[mineIdx];action=`<div class="elig yes">✓ You answered ${ORD[mineIdx]} and earned ${money(a.payout)}${a.early?" (early bird)":""}</div>`}
   else if(full)action=`<div class="muted" style="font-size:13px">All ${q.slots} spots have been answered.</div>`;
   else if(claimed)action=`<label class="field"><span>Your answer</span><textarea class="prose" id="ans-${q.id}" data-draft="${q.id}" style="min-height:100px" placeholder="Explain it the way you wish someone had explained it to you.">${esc(drafts[q.id]||"")}</textarea></label>
     <div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">Spot held for you · <span data-claim="${q.claim.until}">${mins(q.claim.until-Date.now())} min</span> left · <button class="linkbtn" data-release="${q.id}">Release</button></span><button class="btn primary sm" data-submit="${q.id}">Submit answer for $${eb?ebPay(q):rw}</button></div>`;
@@ -1075,7 +1085,7 @@ function tqCard(q){
     <div class="tq-head">
       <div class="avatar sm" aria-hidden="true">${esc(initials(q.asker||"Student"))}</div>
       <div style="min-width:0;flex:1"><b>${esc(q.asker||"Student")}</b><div class="q-time">${esc(UNIS[q.uni]?UNIS[q.uni].name:q.uni)} · ${ago(q.at)}</div></div>
-      <div class="reward-box${eb?" eb":""}">${eb?`<span class="eb-tag">Early bird</span><b>$${ebPay(q)}</b><small><span data-eb="${ebEnd(q)}">${mins(ebLeft(q))} min</span> left, then $${rw}</small>`:`<b>$${rw}</b><small>Reward</small>`}</div>
+      <div class="reward-box${eb?" eb":""}">${eb?`<span class="eb-tag">Early bird</span><b>${money(ebPay(q))}</b><small><span data-eb="${ebEnd(q)}">${mins(ebLeft(q))} min</span> left, then ${money(rw)}</small>`:`<b>${money(rw)}</b><small>Reward</small>`}</div>
     </div>
     <div class="row" style="gap:6px"><span class="q-code">${esc(q.course)}</span><span class="muted" style="font-size:13px">${esc(titleOf(q.uni,q.course))}</span>${(()=>{const me=S.tutors.find(t=>t.id==="me");const x=me&&matchCourse(me,q);return x&&(q.uni!==me.uni||x.code!==q.course)?`<span class="simchip">Similar to your ${esc(x.code)}</span>`:""})()}${tags.map(t=>`<span class="tagchip">${t}</span>`).join("")}</div>
     <p class="q-text">${esc(q.text)}</p>
@@ -1093,8 +1103,8 @@ function incentivesHTML(me,rs,r){
   const top=r>=4.8&&answered>=50;
   const pct=n=>Math.min(100,Math.round(n*100));
   return `<div class="pitch">
-    <div class="pitch-main"><span class="eyebrow">Your earning potential</span><div class="pitch-big">Up to <b>$${MAX_HOURLY}</b> an hour</div><p>Answer 10 questions an hour at early-bird rates, from your phone, between classes. No lesson plans, no fixed hours.</p>
-      <div class="pitch-now">This hour: <b>$${hourEarn}</b> from ${hour.length} answer${hour.length===1?"":"s"}</div></div>
+    <div class="pitch-main"><span class="eyebrow">Your earning potential</span><div class="pitch-big">Up to <b>$${MAX_HOURLY}</b> an hour</div><p>Answer 10 questions an hour at the $2.50 early-bird rate, from your phone, between classes. No lesson plans, no fixed hours.</p>
+      <div class="pitch-now">This hour: <b>${money(hourEarn)}</b> from ${hour.length} answer${hour.length===1?"":"s"}</div></div>
     <div class="goals">
       <div class="goal"><div class="row" style="justify-content:space-between"><b>Weekly bonus</b><span class="mono">+$${WEEKLY_BONUS}</span></div><div class="meter"><i style="width:${pct(week/WEEKLY_GOAL)}%"></i></div><small>${week>=WEEKLY_GOAL?"Unlocked. Paid out on Monday.":`${week} of ${WEEKLY_GOAL} answers this week`}</small></div>
       <div class="goal"><div class="row" style="justify-content:space-between"><b>Top Tutor</b><span class="mono">${top?"Active":"Locked"}</span></div><div class="meter"><i style="width:${pct(Math.min(answered/50,rs.length?r/4.8:0))}%"></i></div><small>${top?"You see new questions 2 minutes before everyone else.":`Reach 50 answers and a 4.8 rating to see new questions 2 minutes early. You're at ${answered} answers, ${rs.length?r.toFixed(1):"no"} rating.`}</small></div>
@@ -1103,7 +1113,7 @@ function incentivesHTML(me,rs,r){
 }
 function renderTutor(){
   const me=S.tutors.find(t=>t.id==="me");const root=$("#tutor-root");
-  if(!me){root.innerHTML=`<div class="locked" style="max-width:560px"><h2 style="font-size:24px">Set up your tutor profile</h2><p class="muted">Scan your transcript to find the courses you can tutor, then start answering questions for $3 to $5 each. Fast tutors earn up to $50 an hour.</p><button class="btn primary" data-go="teach">Scan my transcript</button></div>`;return}
+  if(!me){root.innerHTML=`<div class="locked" style="max-width:560px"><h2 style="font-size:24px">Set up your tutor profile</h2><p class="muted">Scan your transcript to find the courses you can tutor, then start answering questions for $2 each ($2.50 early bird). Fast tutors earn up to $25 an hour.</p><button class="btn primary" data-go="teach">Scan my transcript</button></div>`;return}
   const rs=me.reviews||[];const r=avg(rs);
   const answered=(me.answeredBase||0)+S.payouts.length;
   const early=S.payouts.filter(p=>p.early).length;
@@ -1123,7 +1133,7 @@ function renderTutor(){
         <div class="rating-row"><span class="rating-big">${rs.length?r.toFixed(1):"New"}</span><div>${starsHTML(r,20)}<div class="muted" style="font-size:13px">${rs.length} review${rs.length===1?"":"s"}</div></div></div>
         <div class="stats">
           <div><b>${answered}</b><span>Answers</span></div>
-          <div><b>$${S.earnedTotal}</b><span>Earned</span></div>
+          <div><b>${money(S.earnedTotal)}</b><span>Earned</span></div>
           <div><b>${S.payouts.length?Math.round(early/S.payouts.length*100)+"%":"—"}</b><span>Early bird</span></div>
         </div>
         ${me.bio?`<p style="font-size:14px">${esc(me.bio)}</p>`:""}
@@ -1140,8 +1150,8 @@ function renderTutor(){
     </aside>
     <div class="col">
       <div class="earn-strip">
-        <div><div class="eyebrow" style="color:inherit;opacity:.7">Ready to cash out</div><div class="earn-amt">$${S.earnings}</div></div>
-        <div class="earn-rules"><span><b>$3</b> standard answer</span><span><b>$4</b> HD-only or verified questions</span><span class="ebr"><b>+$1</b> early bird, answered within 20 min of posting</span></div>
+        <div><div class="eyebrow" style="color:inherit;opacity:.7">Ready to cash out</div><div class="earn-amt">${money(S.earnings)}</div></div>
+        <div class="earn-rules"><span><b>$2</b> per answer</span><span class="ebr"><b>$2.50</b> early bird, answered within 20 min of posting</span><span><b>+$5</b> weekly bonus for 20 answers</span></div>
         <button class="btn" id="cashout" ${S.earnings?"":"disabled"}>Cash out</button>
       </div>
       ${incentivesHTML(me,rs,r)}
@@ -1154,7 +1164,7 @@ function renderTutor(){
 $("#tutor-root").addEventListener("input",e=>{const d=e.target.dataset.draft;if(d)drafts[d]=e.target.value});
 $("#tutor-root").addEventListener("click",e=>{
   const c=e.target.closest("[data-claim-q]"),rel=e.target.closest("[data-release]"),sub=e.target.closest("[data-submit]");
-  if(e.target.id==="cashout"){toast(`$${S.earnings} sent to your bank. In the live version this goes through Stripe.`);S.earnings=0;save();renderTutor();return}
+  if(e.target.id==="cashout"){toast(`${money(S.earnings)} sent to your bank. In the live version this goes through Stripe.`);S.earnings=0;save();renderTutor();return}
   if(c){const q=S.questions.find(x=>x.id===c.dataset.claimQ);
     const busy=activeClaim();
     if(busy&&busy.id!==q.id){toast(`You can hold one question at a time. Finish or release ${busy.course} first.`);return}
@@ -1172,7 +1182,7 @@ $("#tutor-root").addEventListener("click",e=>{
     q.answers.push({by:me.name+" (you)",mark:x.mark,grade:x.grade,equals:me.equals,text:txt,at:Date.now(),byMe:true,payout,early});
     delete q.claim;delete drafts[q.id];
     S.earnings+=payout;S.earnedTotal+=payout;S.payouts.unshift({q:q.id,course:q.course,amount:payout,early,at:Date.now()});
-    save();renderTutor();toast(`+$${payout}${early?" early bird":""} for your ${q.course} answer`);
+    save();renderTutor();toast(`+${money(payout)}${early?" early bird":""} for your ${q.course} answer`);
     setTimeout(()=>{
       const stars=Math.random()<.75?5:4;
       me.reviews=me.reviews||[];me.reviews.unshift({by:q.asker||"Student",course:q.course,stars,text:REVIEW_TEXT[Math.floor(Math.random()*REVIEW_TEXT.length)],at:Date.now()});

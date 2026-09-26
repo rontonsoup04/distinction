@@ -21,18 +21,20 @@ Distinction is a peer-tutoring marketplace for university students. Pick your un
 - Profile with star rating, reviews, and the courses you can tutor
 - Transcript scanning finds every course you scored 75+ in
 - Claim one question at a time (10-minute hold), then answer it
-- Earn $3 per answer, $4 for HD-only or verified questions, plus a $1 early-bird bonus within 20 minutes of posting
+- Earn $2 per answer, or $2.50 if answered within 20 minutes of posting (early bird)
 - Weekly bonus and Top Tutor progress
 
 ## Pricing (prototype)
 
-| Answers | Credits | + HD only | + Verified |
-|---|---|---|---|
-| 2 | 5 | +2 | +2 |
-| 3 | 7 | +2 | +2 |
-| 5 | 10 | +2 | +2 |
+1 credit = $1 AUD.
 
-1 credit = $2.50 AUD.
+| Answers | Student pays | + HD only | + Verified only |
+|---|---|---|---|
+| 2 | $6 | +$1 | +$1 |
+| 3 | $9 | +$1 | +$1 |
+| 5 | $14 | +$1 | +$1 |
+
+Tutors earn $2 per answer, or $2.50 early bird. Unfilled answer spots are refunded when the question closes.
 
 ## Run locally
 
