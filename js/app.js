@@ -803,7 +803,17 @@
       const rules = ["I'll explain concepts in my own words and won't complete assessable work for students.", "I won't share past assignments, exam answers or files. I'll only answer with text and markup on the student's document.", "The transcript I uploaded is my own, official and unedited."];
       $("#body").innerHTML = `<h2>My eQuals verification</h2>
         <p class="muted" style="font-size:14px">Every Distinction tutor is verified through My eQuals, the official digital transcript service used by Australian universities. Share your transcript from My eQuals and paste the link here. We use it to confirm your uploaded transcript is genuine.</p>
-        <label class="field"><span>My eQuals share link</span><input type="url" id="eq" value="${esc(A.myequals)}" placeholder="https://www.myequals.edu.au/…" required><small>In My eQuals, open your academic transcript, choose Share, create a link and copy it.</small></label>
+        <div class="panel" style="background:var(--surface-2);gap:10px;padding:16px">
+          <b style="font-family:var(--display);font-size:17px">How to get your My eQuals link</b>
+          <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14px">
+            <li><b>Order an official transcript from your uni.</b> Most Australian universities issue transcripts through My eQuals. Graduates may already have one in their account. At UNSW, current students order a Standard Academic Transcript online for $20, and it's ready within 5 working days. Other unis vary, so check your uni's transcript page.</li>
+            <li><b>Open the email from My eQuals</b> when your transcript is ready, and create your account or sign in at <a href="https://www.myequals.edu.au/" target="_blank" rel="noopener noreferrer">myequals.edu.au</a>.</li>
+            <li><b>Open your academic transcript and choose Share.</b> Pick <b>Public link</b> (without a PIN) and set the expiry to at least 30 days, so our reviewer can open it.</li>
+            <li><b>Copy the link</b> and paste it below.</li>
+          </ol>
+          <small class="muted">Waiting on your transcript? Your profile and uploaded transcript are saved. Come back to this step when your link arrives.</small>
+        </div>
+        <label class="field"><span>My eQuals share link</span><input type="url" id="eq" value="${esc(A.myequals)}" placeholder="https://www.myequals.edu.au/…" required></label>
         <div class="agree">${rules.map((r, i) => `<label class="check"><input type="checkbox" data-ag="${i}" ${A.agree[i] ? "checked" : ""}><span>${r}</span></label>`).join("")}</div>
         <div id="st" hidden></div>
         <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="next">Continue</button></div>`;
@@ -812,7 +822,7 @@
       $("#next").onclick = () => {
         A.myequals = $("#eq").value.trim();
         if (!A.myequals) return status($("#st"), "Paste your My eQuals share link. It's required for every tutor.", "err");
-        if (!/^https:\/\/([\w-]+\.)*myequals\.(edu\.au|net)\//i.test(A.myequals)) return status($("#st"), "That doesn't look like a My eQuals link. It should start with https://www.myequals.edu.au/", "err");
+        if (!/^https:\/\/([\w-]+\.)*myequals\.(edu\.au|net|org)\//i.test(A.myequals)) return status($("#st"), "That doesn't look like a My eQuals link. It should start with https://www.myequals.edu.au/ or https://myequals.org/", "err");
         if (A.agree.some(x => !x)) return status($("#st"), "Tick all three boxes to continue.", "err");
         A.step = 4; render();
       };
