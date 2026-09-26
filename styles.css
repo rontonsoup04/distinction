@@ -114,7 +114,7 @@ main{padding-block:28px 64px}
 .drop.over{border-color:var(--accent);background:var(--accent-soft)}
 .drop strong{font-family:var(--display);font-size:17px}
 .drop .file{font-family:var(--mono);font-size:13px;color:var(--accent)}
-textarea,input[type=text],input[type=number],input[type=url],select{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 11px}
+textarea,input[type=text],input[type=number],input[type=url],input[type=email],input[type=password],select{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 11px}
 textarea{resize:vertical;min-height:170px;font-family:var(--mono);font-size:13px}
 textarea.prose{font-family:var(--body);font-size:15px;min-height:110px}
 .field{display:flex;flex-direction:column;gap:6px}
