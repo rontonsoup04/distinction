@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: distinction
+    runtime: static
+    buildCommand: echo "No build step"
+    staticPublishPath: ./
