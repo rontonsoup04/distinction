@@ -52,7 +52,15 @@ prototype.html    The earlier clickable prototype
 
 ## Database
 
-Run `supabase/schema.sql` then `supabase/seed.sql` in the Supabase SQL editor. Both are safe to re-run.
+Run these in the Supabase SQL editor, in order (all safe to re-run):
+
+1. `supabase/schema.sql`
+2. `supabase/seed.sql`
+3. `supabase/migration_02_scans_and_equals.sql`: courses come only from the transcript scan
+4. `supabase/migration_03_equals_domains.sql`
+5. `supabase/migration_04_credits_forum_badge.sql`: credits, forum-style questions, drafting status, optional My eQuals checkmark
+
+The `scan-transcript` Edge Function (`supabase/functions/scan-transcript`) reads transcripts with Claude. It needs an `ANTHROPIC_API_KEY` secret in Supabase.
 
 Security highlights:
 - Row level security on every table
