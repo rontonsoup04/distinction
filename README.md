@@ -61,6 +61,8 @@ Run these in the Supabase SQL editor, in order (all safe to re-run):
 5. `supabase/migration_04_credits_forum_badge.sql`: credits, forum-style questions, drafting status, optional My eQuals checkmark
 6. `supabase/migration_05_translations.sql`: translation cache
 7. `supabase/migration_06_no_welcome_credits.sql`: accounts start at $0; admins can add credits by hand
+8. `supabase/migration_07_free_topups.sql`: temporary free top-ups (switch off in `app_settings`)
+9. `supabase/migration_08_more_courses.sql`: more courses (UNSW first) and a second, broad similarity group. Regenerate with `supabase/gen_more.py`
 
 Add test credits to an account (until payments launch):
 
