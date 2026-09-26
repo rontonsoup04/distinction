@@ -52,8 +52,15 @@
   }
   async function loadProfile() {
     if (!S.user) { S.profile = null; return; }
-    const { data } = await sb.from("profiles").select("*").eq("id", S.user.id).maybeSingle();
-    S.profile = data;
+    let { data, error } = await sb.from("profiles").select("*").eq("id", S.user.id).maybeSingle();
+    if (error || !data) {
+      // A saved login that no longer works (deleted user, revoked session): sign out cleanly
+      const { data: u, error: ue } = await sb.auth.getUser();
+      if (ue || !u || !u.user) { await sb.auth.signOut({ scope: "local" }).catch(() => { }); S.session = null; S.user = null; S.profile = null; return; }
+      // Signed in but the profile row is missing: create it
+      if (!error) { await sb.rpc("ensure_my_profile").catch(() => { }); ({ data } = await sb.from("profiles").select("*").eq("id", S.user.id).maybeSingle()); }
+    }
+    S.profile = data || null;
     if (data && window.I18N) I18N.setLang(langValue(data.answer_language));
   }
   const displayName = p => (p && (p.display_name || (p.full_name || "").split(" ")[0])) || "Student";
@@ -97,23 +104,24 @@
     window.scrollTo(0, 0);
     if (!S.user && !PUBLIC.includes(r)) { sessionStorage.setItem("after-login", location.hash); location.hash = "#/login"; return; }
     if (S.user && ["login", "signup"].includes(r)) { location.hash = "#/"; return; }
+    if (S.user && !S.profile && r !== "new-password") { app().innerHTML = `<div class="empty">We couldn't load your account. <button class="btn sm" id="retry-prof">Try again</button> <button class="btn ghost sm" id="so-prof">Sign out</button></div>`; $("#retry-prof").onclick = async () => { await loadProfile(); route(); }; $("#so-prof").onclick = async () => { await sb.auth.signOut(); location.hash = "#/login"; }; return; }
     if (S.user && S.profile && !S.profile.onboarded && !["welcome", "new-password"].includes(r)) { location.hash = "#/welcome"; return; }
     try {
       switch (r) {
         case "": return S.user ? (location.hash = "#/ask") : pageHome();
-        case "login": return pageLogin();
-        case "signup": return pageSignup();
-        case "reset": return pageReset();
-        case "new-password": return pageNewPassword();
-        case "welcome": return pageWelcome();
-        case "profile": return pageProfile();
-        case "ask": return pageAsk();
-        case "questions": return pageMyQuestions();
-        case "q": return pageQuestion(parts[1]);
-        case "tutor": return parts[1] === "apply" ? pageTutorApply() : pageTutor();
-        case "answer": return pageAnswer(parts[1]);
-        case "admin": return pageAdmin();
-        case "credits": return pageCredits();
+        case "login": return await pageLogin();
+        case "signup": return await pageSignup();
+        case "reset": return await pageReset();
+        case "new-password": return await pageNewPassword();
+        case "welcome": return await pageWelcome();
+        case "profile": return await pageProfile();
+        case "ask": return await pageAsk();
+        case "questions": return await pageMyQuestions();
+        case "q": return await pageQuestion(parts[1]);
+        case "tutor": return await (parts[1] === "apply" ? pageTutorApply() : pageTutor());
+        case "answer": return await pageAnswer(parts[1]);
+        case "admin": return await pageAdmin();
+        case "credits": return await pageCredits();
         default: app().innerHTML = `<div class="empty">Page not found. <a href="#/">Go home</a></div>`;
       }
     } catch (e) { console.error(e); app().innerHTML = `<div class="status err">${esc(errMsg(e))}</div>`; }

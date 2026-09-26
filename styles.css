@@ -237,6 +237,9 @@ tr.ineligible td{color:var(--muted)}
 .foot{border-top:1px solid var(--line);padding-block:22px}
 .foot .wrap{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .foot-line{font-family:var(--display);font-weight:700;font-size:18px;letter-spacing:-.01em}
+.foot-links{display:flex;gap:16px;font-size:13px}
+.foot-links a{color:var(--muted);text-decoration:none}
+.foot-links a:hover{color:var(--ink);text-decoration:underline}
 /* compact composer */
 .panel.composer{gap:12px;padding:18px}
 .composer .field{gap:5px}
