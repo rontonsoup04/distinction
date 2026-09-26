@@ -4,7 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="description" content="Distinction: ask any uni course question and get answers from students who got an HD. Let's succeed as a generation.">
-<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px/1.5 system-ui,-apple-system,sans-serif;background:#fafafa}img{max-width:100%}[hidden]{display:none!important}</style>
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px/1.5 system-ui,-apple-system,sans-serif;background:#fafafa}img{max-width:100%}[hidden]{display:none!important}/* stable layout: long dropdown values truncate instead of resizing columns */
+.intro{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}
+.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.field,.gsel,.gsel-btn{min-width:0}
+.gsel-val{flex:1}
+.gsel-val>span:first-child{flex:none}
+.gsel-sub{min-width:0}
+@media (max-width:820px){.intro,.two{grid-template-columns:minmax(0,1fr)}}
+
+</style>
 <title>Distinction</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
