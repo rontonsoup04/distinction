@@ -22,7 +22,7 @@
   const goalChips = gs => (gs || []).map(v => `<span class="goalchip${v === "course_specific" ? " uni" : ""}">${esc(goalLabel(v))}</span>`).join("");
   const validCode = c => /^[A-Z0-9]{3,12}$/.test(c || "") && /\d{3}/.test(c || "");
 
-  const S = { session: null, user: null, profile: null, unis: [], uniMap: {}, courses: {}, timers: [], ready: false };
+  const S = { names: {}, session: null, user: null, profile: null, unis: [], uniMap: {}, courses: {}, timers: [], ready: false };
 
   /* ---------------- data ---------------- */
   async function loadUnis() {
@@ -92,6 +92,12 @@
   const app = () => $("#app");
   function clearTimers() { S.timers.forEach(clearInterval); S.timers = []; }
   function every(ms, fn) { S.timers.push(setInterval(fn, ms)); }
+  const refreshBtn = id => `<button type="button" class="btn ghost sm refresh" id="${id}" aria-label="Refresh"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Refresh</span></button>`;
+  function wireRefresh(id, fn) {
+    const b = $("#" + id); if (!b) return;
+    b.onclick = async () => { b.classList.add("busy"); b.disabled = true; try { await fn(); } finally { setTimeout(() => { b.classList.remove("busy"); b.disabled = false; }, 400); } };
+    every(15000, () => document.querySelectorAll("[data-updated]").forEach(el => { const t = +el.dataset.updated; if (t) el.textContent = Date.now() - t < 20000 ? "Updated just now" : `Updated ${ago(t)}`; }));
+  }
 
   /* ---------------- router ---------------- */
   const PUBLIC = ["", "login", "signup", "reset", "new-password"];
@@ -411,7 +417,7 @@
           <div id="a-status" hidden></div>
         </form>
       </div>
-      <div class="col"><div class="results-head"><h2>Your recent questions</h2><a href="#/questions">See all</a></div><div class="qgrid" id="recent"></div></div>
+      <div class="col"><div class="results-head"><h2>Your recent questions</h2><div class="row" style="gap:8px"><span class="muted upd" data-updated></span>${refreshBtn("ref-recent")}<a href="#/questions">See all</a></div></div><div class="qgrid" id="recent"></div></div>
     </section>`;
 
     const courseSel = glassSelect($("#a-course"), { options: [], value: null, mono: true, placeholder: "Choose a course", search: "Type a course code or name, e.g. COMP", freeText: validCode, minQuery: 3, minText: "Type at least 3 letters of the course code or name, e.g. COMP or Accounting", emptyText: "No matches. Type the full course code to use it." });
@@ -495,34 +501,67 @@
         location.hash = "#/q/" + data.id;
       } catch (err) { status(st, errMsg(err), "err"); btn.disabled = false; }
     };
+    wireRefresh("ref-recent", () => renderRecent($("#recent"), 4));
     renderRecent($("#recent"), 4);
+    every(8000, () => renderRecent($("#recent"), 4));
     settle();
   }
 
   async function myQuestions(limit) {
-    let q = sb.from("questions").select("id, uni_id, course_code, body, slots, urgent, min_mark, verified_only, expires_at, created_at, attachment_name, answers(count)").eq("asker_id", S.user.id).order("created_at", { ascending: false });
+    let q = sb.from("questions").select("id, uni_id, course_code, body, slots, urgent, min_mark, verified_only, expires_at, created_at, attachment_name, answers(id, position, bubbles, tutor_id, created_at)").eq("asker_id", S.user.id).order("created_at", { ascending: false });
     if (limit) q = q.limit(limit);
-    const { data, error } = await q; if (error) throw error; return data;
+    const { data, error } = await q; if (error) throw error;
+    const ids = [...new Set(data.flatMap(x => (x.answers || []).map(a => a.tutor_id)))];
+    if (ids.length) { const { data: ts } = await sb.from("profiles").select("id, display_name, full_name").in("id", ids); (ts || []).forEach(t => S.names[t.id] = displayName(t)); }
+    return data;
   }
   function qSummary(q) {
-    const n = (q.answers && q.answers[0] && q.answers[0].count) || 0, closed = new Date(q.expires_at) < new Date();
+    const ans = (q.answers || []).slice().sort((a, b) => a.position - b.position);
+    const n = ans.length, closed = new Date(q.expires_at) < new Date();
     return `<a class="q-link" href="#/q/${q.id}"><article class="q${closed ? " closed" : ""}">
       <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniShort(q.uni_id))} · ${ago(q.created_at)}</span></span><span class="q-exp${closed ? "" : " live"}">${left(q.expires_at)}</span></div>
       <p class="q-text">${esc(q.body)}</p>
       <div class="q-pay"><span class="slotbar">${Array.from({ length: q.slots }, (_, i) => `<i class="${i < n ? "on" : ""}"></i>`).join("")}</span><span>${n} of ${q.slots} answers</span>${q.urgent ? '<span class="tagchip">Urgent</span>' : ""}${q.attachment_name ? '<span class="tagchip">Attachment</span>' : ""}</div>
+      ${ans.length ? `<div class="ans-preview">${ans.map(a => `<div class="ap"><b data-notr>${esc(S.names[a.tutor_id] || "Tutor")}</b><span>${esc((a.bubbles || []).join(" ").slice(0, 140))}${(a.bubbles || []).join(" ").length > 140 ? "…" : ""}</span></div>`).join("")}</div>` : ""}
       ${S.drafting && S.drafting[q.id] ? `<div class="drafting"><span class="spin"></span><span>${esc(S.drafting[q.id].join(", "))} ${S.drafting[q.id].length > 1 ? "are" : "is"} drafting up the answer<span class="dots"></span></span></div>` : ""}
+      <span class="q-open">${n ? "Open to see full answers" : "Open question"} →</span>
     </article></a>`;
   }
   async function renderRecent(el, limit) {
+    if (!el || !el.isConnected) return;
     const [qs, dr] = await Promise.all([myQuestions(limit), sb.rpc("my_drafting")]);
+    if (!el.isConnected) return;
+    const stamp = el.parentElement && el.parentElement.querySelector("[data-updated]"); if (stamp) { stamp.dataset.updated = Date.now(); stamp.textContent = "Updated just now"; }
     S.drafting = {}; ((dr && dr.data) || []).forEach(d => { (S.drafting[d.question_id] = S.drafting[d.question_id] || []).push(d.tutor_name); });
     el.innerHTML = qs.length ? qs.map(qSummary).join("") : `<div class="empty">You haven't asked anything yet.</div>`;
   }
   async function pageMyQuestions() {
-    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">My questions</h1><a class="btn primary" href="#/ask">Ask a question</a></div><div class="qgrid" id="list"><div class="boot">Loading…</div></div></section>`;
+    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">My questions</h1><div class="row" style="gap:8px"><span class="muted upd" data-updated></span>${refreshBtn("ref-list")}<a class="btn primary" href="#/ask">Ask a question</a></div></div><div class="qgrid" id="list"><div class="boot">Loading…</div></div></section>`;
+    wireRefresh("ref-list", () => renderRecent($("#list")));
     await renderRecent($("#list"));
     settle();
-    every(15000, () => renderRecent($("#list")));
+    every(8000, () => renderRecent($("#list")));
+  }
+
+  /* AI transcript scan: animated progress while the scan-transcript function runs (10 to 20 seconds) */
+  function scanAnimation(el) {
+    const STEPS = ["Opening your transcript", "Finding course codes", "Reading marks and grades", "Checking which courses you can tutor"];
+    el.innerHTML = `<div class="scan" role="status" aria-live="polite">
+      <div class="scan-doc" aria-hidden="true">${Array.from({ length: 9 }, (_, i) => `<i style="width:${[80, 55, 70, 62, 76, 48, 68, 58, 72][i]}%"></i>`).join("")}<div class="scan-beam"></div></div>
+      <div class="scan-body"><div class="scan-title"><span class="ai-spark" aria-hidden="true">✦</span> AI is reading your transcript</div>
+        <ul class="scan-steps">${STEPS.map((t, i) => `<li data-s="${i}">${esc(t)}</li>`).join("")}</ul>
+        <div class="scan-bar"><i></i></div><small class="muted">Usually 10 to 20 seconds · <span class="scan-t">0s</span></small></div></div>`;
+    const t0 = Date.now(), bar = el.querySelector(".scan-bar i"), tt = el.querySelector(".scan-t"), lis = [...el.querySelectorAll(".scan-steps li")];
+    const at = [0, 3, 8, 14];
+    const paint = done => {
+      const sec = (Date.now() - t0) / 1000;
+      tt.textContent = Math.floor(sec) + "s";
+      bar.style.width = (done ? 100 : Math.min(94, 94 * (1 - Math.exp(-sec / 9)))) + "%";
+      const cur = done ? STEPS.length : at.filter(x => sec >= x).length - 1;
+      lis.forEach((li, i) => li.className = i < cur ? "done" : i === cur ? "active" : "");
+    };
+    paint(false); const iv = setInterval(() => paint(false), 250);
+    return { finish: ok => new Promise(res => { clearInterval(iv); paint(true); el.querySelector(".scan-title").innerHTML = ok ? '<span class="ai-spark" aria-hidden="true">✦</span> Done. Here\'s what the AI found' : "Scan finished"; setTimeout(() => { el.innerHTML = ""; res(); }, 900); }) };
   }
 
   /* ---------------- question detail (student) ---------------- */
@@ -549,7 +588,7 @@
           </article>
           ${q.attachment_path ? `<div class="answer-tabs" id="ann-tabs"></div><div id="doc"></div>` : ""}
         </div>
-        <aside class="answer-side"><div class="results-head"><h2>Answers</h2><span class="muted" id="count"></span></div><div id="drafting"></div><div class="col" id="answers"></div></aside>
+        <aside class="answer-side"><div class="results-head"><h2>Answers <span class="muted" id="count" style="font-size:15px;font-weight:500"></span></h2>${refreshBtn("ref-ans")}</div><div id="drafting"></div><div class="col" id="answers"></div></aside>
       </div></section>`;
     let doc = null;
     if (q.attachment_path) {
@@ -637,7 +676,8 @@
       };
     });
     await load();
-    every(10000, () => { const el = $("[data-exp]"); if (el) el.textContent = left(el.dataset.exp); if (new Date(q.expires_at) > new Date()) load(); });
+    wireRefresh("ref-ans", () => { lastIds = ""; return load(); });
+    every(8000, () => { const el = $("[data-exp]"); if (el) el.textContent = left(el.dataset.exp); if (new Date(q.expires_at) > new Date()) load(); });
     if (mine) settle();
   }
 
@@ -964,7 +1004,8 @@
     }
     function step2() {
       $("#body").innerHTML = `<h2>Upload your transcript</h2>
-        <p class="muted" style="font-size:14px">Upload your official academic transcript or statement as a PDF or screenshot. We read your courses and marks straight from it. Marks can't be typed in or changed, and our team checks every transcript before approving.</p>
+        <p class="muted" style="font-size:14px">Upload your official academic transcript or statement as a PDF or screenshot. Marks can't be typed in or changed, and our team checks every transcript before approving.</p>
+        <div class="ai-note"><span class="ai-spark" aria-hidden="true">✦</span><span><b>Our AI reads your transcript for you.</b> After you upload, it scans the document and pulls out every course code, mark and grade. This takes about 10 to 20 seconds, so keep this page open.</span></div>
         <label class="drop" id="drop" for="tfile"><strong>${A.file ? esc(A.file.name) : "Drop your transcript here"}</strong><span class="muted" style="font-size:14px">PDF or image, up to 10 MB. Or click to choose a file.</span><input type="file" id="tfile" accept="${FILE_TYPES.join(",")}" hidden></label>
         <div id="st" hidden></div>
         <div id="tbl"></div>
@@ -986,11 +1027,13 @@
         const up = await sb.storage.from("transcripts").upload(path, f, { contentType: f.type });
         if (up.error) { A.file = null; busy = false; $("#next").disabled = false; return status($("#st"), errMsg(up.error), "err"); }
         A.path = path;
-        status($("#st"), "Reading your courses and marks. This takes about 10 to 20 seconds…", "", true);
+        status($("#st"), "");
+        const scan = scanAnimation($("#tbl"));
         try {
           const { data, error } = await sb.functions.invoke("scan-transcript", { body: { path } });
           if (!error && data && Array.isArray(data.courses)) { A.courses = data.courses.sort((a, b) => b.mark - a.mark); A.scanned = true; }
         } catch (e) { /* handled below */ }
+        await scan.finish(A.courses.length > 0);
         busy = false; $("#next").disabled = false;
         const n = A.courses.filter(c => c.mark >= 75).length;
         if (A.courses.length) status($("#st"), `We read ${A.courses.length} courses from your transcript. ${n} ${n === 1 ? "has" : "have"} a mark of 75 or more and will be sent for approval.`, "ok");
