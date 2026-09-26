@@ -1174,10 +1174,25 @@
   /* ---------------- boot ---------------- */
   async function boot() {
     if (window.I18N) { I18N.start(sb); I18N.setLang(I18N.initialLang()); }
-    try { await loadUnis(); } catch (e) { app().innerHTML = `<div class="status err">Couldn't connect to the database. ${esc(errMsg(e))}</div>`; return; }
-    const { data: { session } } = await sb.auth.getSession();
-    S.session = session; S.user = session ? session.user : null;
-    await loadProfile();
+    const timeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
+    const clearSaved = () => { try { Object.keys(localStorage).filter(k => /^sb-.*-auth-token/.test(k)).forEach(k => localStorage.removeItem(k)); } catch (_) { } };
+    try { await timeout(loadUnis(), 10000); }
+    catch (e) {
+      // A stuck saved login blocks every request; clear it and reload once
+      if (e.message === "timeout" && !sessionStorage.getItem("boot-reset")) { sessionStorage.setItem("boot-reset", "1"); clearSaved(); location.reload(); return; }
+      app().innerHTML = `<div class="status err">Couldn't connect to the database. ${esc(errMsg(e))} <button class="btn sm" onclick="location.reload()">Try again</button></div>`; return;
+    }
+    sessionStorage.removeItem("boot-reset");
+    try {
+      const { data: { session } } = await timeout(sb.auth.getSession(), 8000);
+      S.session = session; S.user = session ? session.user : null;
+      await timeout(loadProfile(), 8000);
+    } catch (e) {
+      // A stuck saved login: clear it and carry on signed out
+      console.warn("Session check failed, signing out locally", e);
+      clearSaved();
+      S.session = null; S.user = null; S.profile = null;
+    }
     // Google sign-ups: carry the role picked before redirect
     localStorage.removeItem("intended-role");
     if (/access_token|error_description|type=recovery/.test(location.hash)) history.replaceState(null, "", location.pathname + "#/");
@@ -1185,7 +1200,9 @@
     const after = sessionStorage.getItem("after-login");
     if (S.user && after) { sessionStorage.removeItem("after-login"); location.hash = after; }
     route();
-    sb.auth.onAuthStateChange(async (event, session) => {
+    // Supabase deadlocks if its own methods are awaited inside this callback, so defer the work
+    sb.auth.onAuthStateChange((event, session) => { setTimeout(() => onAuth(event, session), 0); });
+    async function onAuth(event, session) {
       const prevUser = S.user && S.user.id;
       S.session = session; S.user = session ? session.user : null;
       if (event === "PASSWORD_RECOVERY") { location.hash = "#/new-password"; return; }
@@ -1194,7 +1211,7 @@
         if (event === "SIGNED_IN") { const a = sessionStorage.getItem("after-login"); sessionStorage.removeItem("after-login"); if (a && a !== location.hash) { location.hash = a; return; } if (["#/login", "#/signup", "#/signup/student", "#/signup/tutor", ""].includes(location.hash) || location.hash.startsWith("#/signup")) { location.hash = "#/"; return; } }
         route();
       }
-    });
+    }
   }
   boot();
 })();
