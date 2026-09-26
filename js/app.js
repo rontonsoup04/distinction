@@ -428,7 +428,7 @@
       if (w < 5) return status(st, "Write a bit more so tutors know what you're stuck on.", "err");
       if (w > WORD_LIMIT) return status(st, `Your question is ${w} words. Cut it to ${WORD_LIMIT} or fewer.`, "err");
       const cost = priceFor(+document.querySelector('input[name="a-count"]:checked').value, $("#a-urgent").checked);
-      if (cost > Number(p.credits || 0)) return status(st, `This question costs ${money(cost)} and you have ${money(Number(p.credits || 0))}. Choose fewer answers or untick Urgent. Buying credits is coming soon.`, "err");
+      if (cost > Number(p.credits || 0)) return status(st, `This question costs ${money(cost)} and you have ${money(Number(p.credits || 0))}. Top up on the Credits page or choose fewer answers.`, "err");
       const btn = $("#a-post"); btn.disabled = true; status(st, attach ? "Uploading your file…" : "Posting…", "", true);
       try {
         let att = {};
@@ -645,13 +645,21 @@
         <div class="table-wrap"><table style="min-width:0"><thead><tr><th>Answers</th><th>Standard</th><th>Urgent</th></tr></thead><tbody>
           ${[2, 3, 5].map(n => `<tr><td>${n} answers</td><td class="num">${money(priceFor(n, false))}</td><td class="num">${money(priceFor(n, true))}</td></tr>`).join("")}
         </tbody></table></div>
-        <div class="eyebrow" style="margin-top:6px">Buy credits</div>
-        <div class="packs">${[[10, "$10", ""], [21, "$20", "+1 bonus credit"], [55, "$50", "+5 bonus credits"]].map(([c, pr, note]) => `<div class="pack" aria-disabled="true" style="cursor:default;opacity:.7"><b>${c}</b><span>credits · ${pr}</span><small>${note || "Starter"}</small></div>`).join("")}</div>
-        <div class="status">Buying credits is coming soon.</div>
+        <div class="eyebrow" style="margin-top:6px">Top up</div>
+        <div class="packs">${[[10, "$10", "Starter"], [21, "$20", "+1 bonus credit"], [55, "$50", "+5 bonus credits"]].map(([c, pr, note]) => `<button class="pack" data-topup="${c}"><b>${c}</b><span>credits · ${pr}</span><small>${note}</small></button>`).join("")}</div>
+        <div class="status" id="topup-st">Test mode: top-ups are free for now and no payment is taken.</div>
       </div>
       <div class="panel"><div class="eyebrow">History</div>
         <ul class="list">${(tx || []).map(t => `<li><span>${esc(t.label)} <span class="muted" style="font-size:12px">${ago(t.created_at)}</span></span><span class="amt ${t.amount > 0 ? "pos" : ""}">${t.amount > 0 ? "+" : ""}${money(Number(t.amount))}</span></li>`).join("") || '<li class="muted">No activity yet.</li>'}</ul>
       </div></div></section>`;
+    $$("[data-topup]").forEach(b => b.onclick = async () => {
+      b.disabled = true;
+      const { error } = await sb.rpc("test_topup", { p_credits: +b.dataset.topup });
+      b.disabled = false;
+      if (error) return status($("#topup-st"), errMsg(error), "err");
+      toast(`Added ${b.dataset.topup} credits`);
+      pageCredits();
+    });
   }
 
   /* ---------------- tutor ---------------- */
