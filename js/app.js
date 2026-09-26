@@ -38,8 +38,8 @@
   }
   const courseOpts = list => list.map(c => ({ value: c.code, label: c.code, sub: c.title }));
   const uniOpts = () => S.unis.map(u => ({ value: u.id, label: u.name, short: u.short_name, sub: u.state }));
-  const PRICE = { 2: 3, 3: 4.5, 5: 7.5 }, URGENT_FEE = 0.75;
-  const priceFor = (n, urgent) => PRICE[n] + (urgent ? URGENT_FEE * n : 0);
+  const PRICE = { 2: 3, 3: 4.5, 5: 7.5 }, URGENT_FEE = 0.75, HD_FEE = 0.5;
+  const priceFor = (n, urgent, hd) => PRICE[n] + (urgent ? URGENT_FEE * n : 0) + (hd ? HD_FEE * n : 0);
   async function refreshCredits() { if (!S.user) return; const { data } = await sb.from("profiles").select("credits").eq("id", S.user.id).single(); if (data && S.profile) { S.profile.credits = Number(data.credits); renderHeader(); } }
   async function settle() { const { data } = await sb.rpc("settle_my_questions"); if (Number(data) > 0) { toast(`${money(Number(data))} refunded to your credits for unanswered spots`); await refreshCredits(); } }
   const uniName = id => (S.uniMap[id] && S.uniMap[id].name) || id || "";
@@ -380,7 +380,7 @@
             <div class="field"><span id="a-course-lbl">Course</span><div class="pop-right" id="a-course" data-label="a-course-lbl"></div></div>
           </div>
           <div class="field"><span>Who can answer</span>
-            <div class="seg" role="radiogroup" aria-label="Minimum grade"><label><input type="radio" name="a-grade" value="75" checked><span>Distinction and HD</span></label><label><input type="radio" name="a-grade" value="85"><span>HD only</span></label></div>
+            <div class="seg" role="radiogroup" aria-label="Minimum grade"><label><input type="radio" name="a-grade" value="75" checked><span>Distinction and HD</span></label><label><input type="radio" name="a-grade" value="85"><span>HD only <em class="plus-cr" id="a-hd-fee">+${money(HD_FEE * 2)}</em></span></label></div>
             <p class="speed-note stack-note" id="a-grade-note">${[0, 1, 2, 3].map(i => `<span data-v="${i}"${i ? " hidden-note" : ""}></span>`).join("")}</p>
           </div>
           <fieldset class="field goals"><legend>What are you after? <small class="muted">Tick any</small></legend>
@@ -416,12 +416,14 @@
     }
     const uniSel2 = glassSelect($("#a-uni"), { options: uniOpts(), value: p.uni_id, search: "Search universities", hideSub: true, onChange: u => { loadCourses(u); paintReach(); } });
     function paintCost() {
-      const n = +document.querySelector('input[name="a-count"]:checked').value, urgent = $("#a-urgent").checked;
-      document.querySelectorAll('input[name="a-count"]').forEach(r => r.parentElement.querySelector("em").textContent = money(priceFor(+r.value, urgent)));
+      const n = +document.querySelector('input[name="a-count"]:checked').value, urgent = $("#a-urgent").checked, hd = isHD();
+      document.querySelectorAll('input[name="a-count"]').forEach(r => r.parentElement.querySelector("em").textContent = money(priceFor(+r.value, urgent, hd)));
       $("#a-urgent-fee").textContent = "+" + money(URGENT_FEE * n);
-      $("#a-cost").innerHTML = `<small>${n} answers${urgent ? " + urgent" : ""}</small><b class="mono">${money(priceFor(n, urgent))}</b>`;
+      $("#a-hd-fee").textContent = "+" + money(HD_FEE * n);
+      $("#a-cost").innerHTML = `<small>${n} answers${hd ? " + HD only" : ""}${urgent ? " + urgent" : ""}</small><b class="mono">${money(priceFor(n, urgent, hd))}</b>`;
     }
-    document.querySelectorAll('input[name="a-count"], #a-urgent').forEach(el => el.addEventListener("change", paintCost));
+    const isHD = () => +document.querySelector('input[name="a-grade"]:checked').value >= 85;
+    document.querySelectorAll('input[name="a-count"], #a-urgent, input[name="a-grade"]').forEach(el => el.addEventListener("change", paintCost));
     const goalsPicked = () => [...document.querySelectorAll('input[name="a-goal"]:checked')].map(el => el.value);
     function paintReach() {
       const hd = +document.querySelector('input[name="a-grade"]:checked').value >= 85, uniOnly = goalsPicked().includes("course_specific");
@@ -459,7 +461,7 @@
       if (!validCode(code)) return status(st, "Pick a course from the list, or type its code in the search box.", "err");
       if (w < 5) return status(st, "Write a bit more so tutors know what you're stuck on.", "err");
       if (w > WORD_LIMIT) return status(st, `Your question is ${w} words. Cut it to ${WORD_LIMIT} or fewer.`, "err");
-      const cost = priceFor(+document.querySelector('input[name="a-count"]:checked').value, $("#a-urgent").checked);
+      const cost = priceFor(+document.querySelector('input[name="a-count"]:checked').value, $("#a-urgent").checked, isHD());
       if (cost > Number(p.credits || 0)) return status(st, `This question costs ${money(cost)} and you have ${money(Number(p.credits || 0))}. Top up on the Credits page or choose fewer answers.`, "err");
       const btn = $("#a-post"); btn.disabled = true; status(st, attach ? "Uploading your file…" : "Posting…", "", true);
       try {
@@ -689,6 +691,7 @@
         <div class="table-wrap"><table style="min-width:0"><thead><tr><th>Answers</th><th>Standard</th><th>Urgent</th></tr></thead><tbody>
           ${[2, 3, 5].map(n => `<tr><td>${n} answers</td><td class="num">${money(priceFor(n, false))}</td><td class="num">${money(priceFor(n, true))}</td></tr>`).join("")}
         </tbody></table></div>
+        <p class="muted" style="font-size:13px">HD only adds ${money(HD_FEE)} per answer.</p>
         <div class="eyebrow" style="margin-top:6px">Top up</div>
         <div class="packs">${[[10, "$10", "Starter"], [21, "$20", "+1 bonus credit"], [55, "$50", "+5 bonus credits"]].map(([c, pr, note]) => `<button class="pack" data-topup="${c}"><b>${c}</b><span>credits · ${pr}</span><small>${note}</small></button>`).join("")}</div>
         <div class="status" id="topup-st">Test mode: top-ups are free for now and no payment is taken.</div>
