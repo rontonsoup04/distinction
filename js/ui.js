@@ -39,6 +39,7 @@
     const find = v => options.find(o => o.value === v) || (extra && extra.value === v ? extra : null);
     function shown() {
       const q = query.trim().toUpperCase();
+      if (cfg.minQuery && q.length < cfg.minQuery) return [];
       let out = q ? options.filter(o => (o.value + " " + o.label + " " + (o.sub || "")).toUpperCase().includes(q)) : options.slice();
       const raw = query.trim(), fv = cfg.keepCase ? raw : q;
       if (cfg.freeText && q && cfg.freeText(fv) && !options.some(o => o.value.toUpperCase() === q)) out.push({ value: fv, label: fv, sub: cfg.freeTextLabel || "Use this course code", custom: true });
@@ -48,7 +49,7 @@
       const o = find(value);
       val.innerHTML = o ? `<span class="${cfg.mono ? "mono" : ""}">${esc(o.short || o.label)}</span>${o.sub && !o.custom && !cfg.hideSub ? `<span class="gsel-sub">${esc(o.sub)}</span>` : ""}` : `<span class="muted">${esc(cfg.placeholder || "Choose")}</span>`;
       const items = shown(); if (active >= items.length) active = items.length - 1; if (active < 0) active = 0;
-      list.innerHTML = items.length ? items.map((o, i) => `<li role="option" id="${id}-o${i}" data-i="${i}" aria-selected="${o.value === value}" class="${i === active ? "active" : ""}"><span class="o-main${cfg.mono ? " mono" : " wrap"}">${esc(o.label)}</span>${o.sub ? `<span class="o-sub">${esc(o.sub)}</span>` : "<span></span>"}<svg class="o-tick" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7.5l2.5 2.5L11 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></li>`).join("") : `<li class="gsel-empty">${esc(cfg.emptyText || "No matches.")}</li>`;
+      list.innerHTML = items.length ? items.map((o, i) => `<li role="option" id="${id}-o${i}" data-i="${i}" aria-selected="${o.value === value}" class="${i === active ? "active" : ""}"><span class="o-main${cfg.mono ? " mono" : " wrap"}">${esc(o.label)}</span>${o.sub ? `<span class="o-sub">${esc(o.sub)}</span>` : "<span></span>"}<svg class="o-tick" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7.5l2.5 2.5L11 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></li>`).join("") : `<li class="gsel-empty">${esc(cfg.minQuery && query.trim().length < cfg.minQuery ? (cfg.minText || `Type at least ${cfg.minQuery} characters`) : (cfg.emptyText || "No matches."))}</li>`;
       list.setAttribute("aria-activedescendant", items.length ? `${id}-o${active}` : "");
       list._items = items;
     }

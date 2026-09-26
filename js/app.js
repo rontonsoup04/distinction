@@ -385,7 +385,7 @@
       <div class="col"><div class="results-head"><h2>Your recent questions</h2><a href="#/questions">See all</a></div><div class="qgrid" id="recent"></div></div>
     </section>`;
 
-    const courseSel = glassSelect($("#a-course"), { options: [], value: null, mono: true, placeholder: "Choose a course", search: "Search or type a course code", freeText: validCode, emptyText: "No matches. Type the full course code to use it." });
+    const courseSel = glassSelect($("#a-course"), { options: [], value: null, mono: true, placeholder: "Choose a course", search: "Type a course code or name, e.g. COMP", freeText: validCode, minQuery: 3, minText: "Type at least 3 letters of the course code or name, e.g. COMP or Accounting", emptyText: "No matches. Type the full course code to use it." });
     async function loadCourses(uni) {
       const list = courseOpts(await coursesFor(uni));
       const mine = (p.current_courses || []).filter(c => uni === p.uni_id);
