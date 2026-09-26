@@ -380,7 +380,7 @@
             <p class="speed-note">Standard questions are usually answered within an hour.</p>
             <label class="check urgent-check"><input type="checkbox" id="a-urgent"><span><b>Urgent</b>: answers within 20 minutes <em class="plus-cr" id="a-urgent-fee">+${money(URGENT_FEE * 2)}</em></span></label>
           </div>
-          <div class="post-row"><div class="field dur"><span id="a-dur-lbl">Open for</span><div id="a-dur" data-label="a-dur-lbl"></div></div><div class="total" id="a-cost"></div><button class="btn primary" id="a-post">Post question</button></div>
+          <div class="post-row"><div class="field dur"><span id="a-dur-lbl">Open for</span><div id="a-dur" data-label="a-dur-lbl"></div><small class="muted">Closes automatically after this time. You can close it earlier whenever you want.</small></div><div class="total" id="a-cost"></div><button class="btn primary" id="a-post">Post question</button></div>
           <div class="price-row muted"><span>Your balance: <b class="mono" style="color:var(--ink)">${money(Number(p.credits || 0))}</b></span><span>Unanswered spots are refunded when the question closes.</span></div>
           <div id="a-status" hidden></div>
         </form>
@@ -509,6 +509,7 @@
           <article class="q">
             <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</span></span><span class="q-exp" data-exp="${q.expires_at}">${left(q.expires_at)}</span></div>
             <p class="q-text" style="font-size:17px">${esc(q.body)}</p>
+            ${mine && new Date(q.expires_at) > new Date() ? `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">Closes automatically ${left(q.expires_at).replace("Closes in", "in")}. Got what you needed?</span><button class="btn sm" id="close-q">Close question</button></div>` : ""}
             <div class="q-pay">${[q.urgent ? "Urgent" : null, q.min_mark >= 85 ? "HD only" : "Open to D and HD tutors", "Similar courses included"].filter(Boolean).map(t => `<span class="tagchip">${t}</span>`).join("")}</div>
           </article>
           ${q.attachment_path ? `<div class="answer-tabs" id="ann-tabs"></div><div id="doc"></div>` : ""}
@@ -589,6 +590,16 @@
           };
         });
       }
+    });
+    const cq = $("#close-q");
+    if (cq) cq.onclick = () => openModal(`<h3>Close this question?</h3><p class="muted" style="font-size:14px">Tutors won't be able to answer it any more. Answers you've already received stay here, and credits for unanswered spots are refunded to you now.</p><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Keep it open</button><button class="btn primary" id="cq-go">Close question</button></div>`, m => {
+      $("#cq-go", m).onclick = async () => {
+        const { data, error } = await sb.rpc("close_question", { q_id: id });
+        if (error) return toast(errMsg(error));
+        closeModal(); await refreshCredits();
+        toast(Number(data) > 0 ? `Question closed. ${money(Number(data))} refunded to your credits.` : "Question closed.");
+        pageQuestion(id);
+      };
     });
     await load();
     every(10000, () => { const el = $("[data-exp]"); if (el) el.textContent = left(el.dataset.exp); if (new Date(q.expires_at) > new Date()) load(); });
