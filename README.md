@@ -9,7 +9,7 @@ Live site: https://distinction.onrender.com
 ## What's built
 
 **Accounts (Supabase Auth)**
-- Sign up and log in with email and password (Google sign-in is built but switched off for now)
+- Sign up and log in with email and password, or Google (Google needs to be switched on in Supabase, see below)
 - Password reset by email
 - Students: name, display name, university, degree, year, current courses, preferred answer language
 - Tutors: a 4-step application covering profile, transcript upload (read automatically from PDFs, editable), My eQuals link and integrity agreement, then submission for review
@@ -77,10 +77,7 @@ update public.profiles set is_admin = true
 where id = (select id from auth.users where email = 'you@example.com');
 ```
 
-## Switching on Google sign-in (later)
-
-The Google buttons are removed from the log in and sign up pages for now. To bring them back, re-add the buttons in `js/app.js` (the `google()` helper is still there), then:
-
+## Switching on Google sign-in
 
 1. In Google Cloud Console, create an OAuth client (Web application).
 2. Add the redirect URI shown in Supabase under Authentication → Sign In / Providers → Google.

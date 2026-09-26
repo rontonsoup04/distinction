@@ -145,12 +145,15 @@
   function pageLogin() {
     app().innerHTML = `<div class="narrow"><form class="panel auth-card" id="f" novalidate>
       <h1>Log in</h1>
+      <button type="button" class="btn block google" id="g">${GOOGLE_SVG}Continue with Google</button>
+      <div class="divider">or</div>
       <label class="field"><span>Email</span><input type="email" id="email" autocomplete="email" required></label>
       <label class="field"><span>Password</span><input type="password" id="pw" autocomplete="current-password" required></label>
       <div id="st" hidden></div>
       <button class="btn primary block" id="go">Log in</button>
       <div class="row" style="justify-content:space-between"><a href="#/reset">Forgot your password?</a><a href="#/signup">Create an account</a></div>
     </form></div>`;
+    $("#g").onclick = () => google();
     $("#f").onsubmit = async e => {
       e.preventDefault();
       const email = $("#email").value.trim(), password = $("#pw").value;
@@ -169,6 +172,8 @@
         <label><input type="radio" name="role" value="student" ${role === "student" ? "checked" : ""}><span class="role"><b>Ask questions</b><small>Student account</small></span></label>
         <label><input type="radio" name="role" value="tutor" ${role === "tutor" ? "checked" : ""}><span class="role"><b>Answer and earn</b><small>Tutor account, needs a transcript check</small></span></label>
       </div>
+      <button type="button" class="btn block google" id="g">${GOOGLE_SVG}Sign up with Google</button>
+      <div class="divider">or</div>
       <label class="field"><span>Full name</span><input type="text" id="name" autocomplete="name" required></label>
       <label class="field"><span>Email</span><input type="email" id="email" autocomplete="email" required><small>Use any email. Your uni email works well.</small></label>
       <label class="field"><span>Password</span><input type="password" id="pw" autocomplete="new-password" minlength="8" required><small>At least 8 characters.</small></label>
@@ -177,6 +182,7 @@
       <div class="row" style="justify-content:center"><span class="muted">Already have an account?</span><a href="#/login">Log in</a></div>
     </form></div>`;
     const roleVal = () => document.querySelector('input[name="role"]:checked').value;
+    $("#g").onclick = () => google(roleVal());
     $("#f").onsubmit = async e => {
       e.preventDefault();
       const full_name = $("#name").value.trim(), email = $("#email").value.trim(), password = $("#pw").value;
