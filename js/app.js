@@ -164,7 +164,7 @@
   function pageSignup() {
     app().innerHTML = `<div class="narrow"><form class="panel auth-card" id="f" novalidate>
       <h1>Create your account</h1>
-      <p class="muted" style="font-size:14px">Every account starts as a student account with $10 of free credits. Once you're set up, you can apply to tutor the courses you aced.</p>
+      <p class="muted" style="font-size:14px">Every account starts as a student account. Once you're set up, you can apply to tutor the courses you aced.</p>
       <button type="button" class="btn block google" id="g">${GOOGLE_SVG}Sign up with Google</button>
       <div class="divider">or</div>
       <label class="field"><span>Full name</span><input type="text" id="name" autocomplete="name" required></label>
@@ -317,7 +317,7 @@
       $("#steps").innerHTML = STEPS.map((s, i) => `<span class="done">${i + 1}. ${s[0]}</span>`).join("");
       $("#body").innerHTML = `<div class="pending-card"><span class="status-pill approved">Account ready</span>
         <h2 style="font-size:26px">You're all set, ${esc(displayName(S.profile))}</h2>
-        <p class="muted">You have <b style="color:var(--ink)">$10 of free credits</b> to ask your first questions.</p>
+        <p class="muted">You can now ask questions about any course. Questions are paid with credits, starting at $3 for 2 answers.</p>
         <a class="btn primary" href="#/ask">Ask a question</a></div>`;
       $("#body").insertAdjacentHTML("afterend", `<div class="panel" style="gap:10px"><span class="eyebrow">Optional</span><h2 style="font-size:22px">Got a D or HD in a course? Earn by tutoring it.</h2>
         <p class="muted" style="font-size:14px">Answer short questions from students in the courses you aced. $1.10 per answer, or $1.70 for urgent ones answered within 20 minutes. Upload your transcript to apply. It takes about 3 minutes.</p>
@@ -640,7 +640,7 @@
       <div class="panel">
         <div class="eyebrow">Your balance</div>
         <div><span class="balance">${money(bal)}</span> <span class="muted">in credits</span></div>
-        <p class="muted" style="font-size:14px">1 credit = $1. You started with $10 of free credits. Unanswered spots are refunded when a question closes, and so is the urgent fee for any answer that takes over 20 minutes.</p>
+        <p class="muted" style="font-size:14px">1 credit = $1. Unanswered spots are refunded when a question closes, and so is the urgent fee for any answer that takes over 20 minutes.</p>
         <div class="eyebrow" style="margin-top:6px">What questions cost</div>
         <div class="table-wrap"><table style="min-width:0"><thead><tr><th>Answers</th><th>Standard</th><th>Urgent</th></tr></thead><tbody>
           ${[2, 3, 5].map(n => `<tr><td>${n} answers</td><td class="num">${money(priceFor(n, false))}</td><td class="num">${money(priceFor(n, true))}</td></tr>`).join("")}
