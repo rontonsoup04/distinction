@@ -43,6 +43,7 @@
     if (!S.user) { S.profile = null; return; }
     const { data } = await sb.from("profiles").select("*").eq("id", S.user.id).maybeSingle();
     S.profile = data;
+    if (data && window.I18N) I18N.setLang(langValue(data.answer_language));
   }
   const displayName = p => (p && (p.display_name || (p.full_name || "").split(" ")[0])) || "Student";
   const errMsg = e => (e && (e.message || e.error_description)) || "Something went wrong. Try again.";
@@ -57,7 +58,7 @@
     ] : [];
     $("#nav").innerHTML = links.map(([r, l]) => `<a href="#/${r}" class="navlink" ${route === r || (r === "tutor" && route === "answer") ? 'aria-current="page"' : ""}>${l}</a>`).join("");
     $("#auth-area").innerHTML = signedIn
-      ? `${p && p.onboarded ? `<a class="credit-pill" href="#/credits" title="Your credits">Credits <b>${money(Number(p.credits || 0))}</b></a>` : ""}<button class="avatar-btn" id="me-btn" aria-haspopup="menu"><span class="avatar" aria-hidden="true">${esc(initials(p && p.full_name || S.user.email))}</span><span>${esc(p ? displayName(p) : "Account")}</span></button>`
+      ? `${p && p.onboarded ? `<a class="credit-pill" href="#/credits" title="Your credits">Credits <b>${money(Number(p.credits || 0))}</b></a>` : ""}<button class="avatar-btn" id="me-btn" aria-haspopup="menu"><span class="avatar" aria-hidden="true">${esc(initials(p && p.full_name || S.user.email))}</span><span data-notr>${esc(p ? displayName(p) : "Account")}</span></button>`
       : `<a class="btn ghost sm" href="#/login">Log in</a><a class="btn primary sm" href="#/signup">Sign up</a>`;
     const btn = $("#me-btn");
     if (btn) btn.onclick = e => { e.stopPropagation(); const m = $("#menu"); m.hidden = !m.hidden; };
@@ -250,7 +251,7 @@
       <div class="field"><span id="pf-degree-lbl">Degree</span><div id="pf-degree" data-label="pf-degree-lbl"></div><small>Can't find yours? Type it in the search box.</small></div>
       <div class="field"><span id="pf-year-lbl">Year of study</span><div id="pf-year" data-label="pf-year-lbl"></div></div>` : ""}
       ${has("bio") ? `<label class="field"><span>Short intro for students</span><textarea class="prose" id="pf-bio" maxlength="400" placeholder="What you're good at explaining.">${esc(p.bio || "")}</textarea></label>` : ""}
-      ${has("prefs") ? `<div class="field"><span id="pf-lang-lbl">Preferred language</span><div id="pf-lang" data-label="pf-lang-lbl"></div><small>Questions and answers written in other languages are translated into this one. You can always tap "Show original".</small></div>
+      ${has("prefs") ? `<div class="field"><span id="pf-lang-lbl">Language</span><div id="pf-lang" data-label="pf-lang-lbl" data-notr></div><small>The whole site switches to this language. Questions and answers written in other languages are translated into it, and you can always tap "Show original".</small></div>
       ${opts.tutor ? "" : `<label class="field"><span>How did you hear about us? (optional)</span><input type="text" id="pf-heard" value="${esc(p.heard_from || "")}" maxlength="80"></label>`}` : ""}`;
     let uniSel, degSel, yearSel, langSel;
     if (has("studies")) {
@@ -281,14 +282,17 @@
   async function saveProfile(v) {
     const { data, error } = await sb.from("profiles").update(v).eq("id", S.user.id).select().single();
     if (error) throw error;
-    S.profile = data; renderHeader(); return data;
+    const langChanged = S.profile && langValue(S.profile.answer_language) !== langValue(data.answer_language);
+    S.profile = data; renderHeader();
+    if (langChanged && window.I18N) I18N.setLang(langValue(data.answer_language));
+    return data;
   }
 
   /* Student sign-up: three short steps, like the tutor application */
   async function pageWelcome() {
     const p = S.profile;
     const W = { step: 1 };
-    const STEPS = [["About you", ["about"], "What should tutors call you?"], ["Your studies", ["studies"], "This helps us send your questions to the right people."], ["Preferences", ["prefs"], "Choose the language you'd like questions and answers shown in."]];
+    const STEPS = [["About you", ["about"], "What should tutors call you?"], ["Your studies", ["studies"], "This helps us send your questions to the right people."], ["Preferences", ["prefs"], "Choose your language. The whole site is shown in it, and questions and answers written in other languages are translated for you."]];
     app().innerHTML = `<div class="medium"><div class="col">
       <div><span class="eyebrow">Student sign-up</span><h1 style="font-size:30px;margin-top:4px">Set up your student account</h1></div>
       <div class="steps" id="steps"></div><div class="panel" id="body"></div>
@@ -549,7 +553,7 @@
         const rv = (revs || []).find(r => r.answer_id === a.id);
         const c = DocView.count(a.annotations);
         return `<div class="answer-card${shownAnswer === a.id ? " active" : ""}" data-a="${a.id}" data-trg>
-          <div class="ans-head"><span class="ord">${["1st", "2nd", "3rd", "4th", "5th"][i]}</span><b>${esc(displayName(t))}</b>${course ? `<span class="grade">${course.mark}<span class="badge ${gcls(course.grade || gradeFor(course.mark))}">${esc(course.grade || gradeFor(course.mark))}</span></span>` : ""}${course && (course.uni_id !== q.uni_id || course.code !== q.course_code) ? `<span class="simchip"><b>${esc(uniShort(course.uni_id))}</b> ${esc(course.code)}</span>` : ""}${t.equals_verified ? '<span class="eq">✓ My eQuals</span>' : ""}<span class="muted">${ago(a.created_at)}</span></div>
+          <div class="ans-head"><span class="ord">${["1st", "2nd", "3rd", "4th", "5th"][i]}</span><b data-notr>${esc(displayName(t))}</b>${course ? `<span class="grade">${course.mark}<span class="badge ${gcls(course.grade || gradeFor(course.mark))}">${esc(course.grade || gradeFor(course.mark))}</span></span>` : ""}${course && (course.uni_id !== q.uni_id || course.code !== q.course_code) ? `<span class="simchip"><b>${esc(uniShort(course.uni_id))}</b> ${esc(course.code)}</span>` : ""}${t.equals_verified ? '<span class="eq">✓ My eQuals</span>' : ""}<span class="muted">${ago(a.created_at)}</span></div>
           <div class="bubbles" data-trslot>${(a.bubbles || []).map(b => `<div class="bubble" data-tr>${esc(b)}</div>`).join("")}</div>
           ${c.strokes || c.notes ? `<button class="btn sm" data-show="${a.id}">${shownAnswer === a.id ? "Hide" : "Show"} markup on your document (${c.notes} note${c.notes === 1 ? "" : "s"}, ${c.strokes} drawing${c.strokes === 1 ? "" : "s"})</button>` : ""}
           ${mine ? (rv ? `<div class="muted" style="font-size:13px">You rated ${stars(rv.stars)}</div>` : `<div class="row" style="justify-content:space-between"><span class="stars-in" role="group" aria-label="Rate this answer">${[1, 2, 3, 4, 5].map(n => `<button data-rate="${a.id}:${a.tutor_id}:${n}" aria-label="${n} star${n > 1 ? "s" : ""}">★</button>`).join("")}</span><button class="linkbtn" data-report="${a.id}">Report</button></div>`) : ""}
@@ -724,7 +728,7 @@
       <aside class="col">
         <div class="panel prof">
           <div class="t-head"><div class="avatar lg" aria-hidden="true">${esc(initials(p.full_name))}</div>
-            <div style="min-width:0"><h2 style="font-size:22px">${esc(displayName(p))}</h2><div class="t-meta">${esc(uniName(p.uni_id))}</div><div class="t-meta">${esc(p.degree || "")}</div>
+            <div style="min-width:0"><h2 style="font-size:22px" data-notr>${esc(displayName(p))}</h2><div class="t-meta">${esc(uniName(p.uni_id))}</div><div class="t-meta">${esc(p.degree || "")}</div>
             ${p.equals_verified ? '<div class="verified">✓ Verified with My eQuals</div>' : '<div class="verified" style="color:var(--muted)">Transcript checked</div>'}</div></div>
           <div class="rating-row"><span class="rating-big">${s.reviews_count ? Number(s.rating).toFixed(1) : "New"}</span><div>${stars(Number(s.rating || 0), 20)}<div class="muted" style="font-size:13px">${s.reviews_count || 0} review${s.reviews_count === 1 ? "" : "s"}</div></div></div>
           <div class="stats"><div><b>${s.answers_count || 0}</b><span>Answers</span></div><div><b>${money(Number(s.earned || 0))}</b><span>Earned</span></div><div><b>${s.answers_count ? Math.round((s.urgent_count || 0) / s.answers_count * 100) + "%" : "—"}</b><span>Urgent</span></div></div>
@@ -794,7 +798,7 @@
     else action = `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">${holding ? `Finish or release your <span class="mono">${esc(holding.course_code)}</span> question to claim this one` : `${spots} of ${q.slots} spot${q.slots > 1 ? "s" : ""} left`}</span><button class="btn primary sm" data-claim="${q.id}" ${holding ? "disabled" : ""}>Claim to answer</button></div>`;
     return `<article class="q tq${answered || full ? " done" : ""}" data-trg>
       <div class="tq-head"><div class="avatar sm" aria-hidden="true">${esc(initials(q.asker_name))}</div>
-        <div style="min-width:0;flex:1"><b>${esc(q.asker_name)}</b><div class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</div></div>
+        <div style="min-width:0;flex:1"><b data-notr>${esc(q.asker_name)}</b><div class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</div></div>
         <div class="reward-box${eb ? " eb" : ""}">${eb ? `<span class="eb-tag">Urgent</span><b>${money(URGENT_PAY)}</b><small>${mins(ebEnd - now)} min left, then ${money(PAY)}</small>` : `<b>${money(PAY)}</b><small>Reward</small>`}</div></div>
       <div class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="muted" style="font-size:13px">${esc(q.course_title)}</span>${similar ? `<span class="simchip">Similar to your ${esc(q.match_code)}</span>` : ""}${q.min_mark >= 85 ? '<span class="tagchip">HD only</span>' : ""}${q.verified_only ? '<span class="tagchip">Verified only</span>' : ""}</div>
       <div data-trslot><p class="q-text" data-tr>${esc(q.body)}</p></div>
@@ -825,7 +829,7 @@
             <div id="doc"></div></div>` : ""}
         <div class="${q.attachment_path ? "answer-side" : "col"}">
           <article class="q">
-            <div class="tq-head"><div class="avatar sm" aria-hidden="true">${esc(initials(q.asker_name))}</div><div style="flex:1;min-width:0"><b>${esc(q.asker_name)}</b><div class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</div></div>
+            <div class="tq-head"><div class="avatar sm" aria-hidden="true">${esc(initials(q.asker_name))}</div><div style="flex:1;min-width:0"><b data-notr>${esc(q.asker_name)}</b><div class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</div></div>
               <div class="reward-box${eb() ? " eb" : ""}" id="reward"></div></div>
             <div class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="muted" style="font-size:13px">${esc(q.course_title)}</span></div>
             <div data-trslot><p class="q-text" style="font-size:16px" data-tr>${esc(q.body)}</p></div>
@@ -1135,6 +1139,7 @@
 
   /* ---------------- boot ---------------- */
   async function boot() {
+    if (window.I18N) { I18N.start(sb); I18N.setLang(I18N.initialLang()); }
     try { await loadUnis(); } catch (e) { app().innerHTML = `<div class="status err">Couldn't connect to the database. ${esc(errMsg(e))}</div>`; return; }
     const { data: { session } } = await sb.auth.getSession();
     S.session = session; S.user = session ? session.user : null;

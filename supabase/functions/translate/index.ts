@@ -28,20 +28,27 @@ Deno.serve(async (req) => {
   const { data: { user } } = await userClient.auth.getUser();
   if (!user) return json({ error: "Sign in first." }, 401);
 
-  let texts: string[] = [], target = "";
-  try { ({ texts, target } = await req.json()); } catch { /* checked below */ }
+  let texts: string[] = [], target = "", mode = "";
+  try { ({ texts, target, mode } = await req.json()); } catch { /* checked below */ }
+  const ui = mode === "ui";
+  const max = ui ? 60 : 20;
   if (!LANGS.includes(target)) return json({ error: "Unsupported language" }, 400);
-  if (!Array.isArray(texts) || texts.length === 0 || texts.length > 20) return json({ error: "Send 1 to 20 texts" }, 400);
-  texts = texts.map((t) => String(t ?? "").slice(0, 3000));
+  if (!Array.isArray(texts) || texts.length === 0 || texts.length > max) return json({ error: `Send 1 to ${max} texts` }, 400);
+  texts = texts.map((t) => String(t ?? "").slice(0, ui ? 600 : 3000));
 
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const keys = await Promise.all(texts.map((t) => sha(target + "\u0000" + t)));
+  const keys = await Promise.all(texts.map((t) => sha((ui ? "ui\u0000" : "") + target + "\u0000" + t)));
   const { data: cached } = await admin.from("translations").select("key, translated, detected, same").in("key", keys);
   const hit = new Map((cached ?? []).map((c) => [c.key, c]));
   const missing = texts.map((t, i) => ({ t, i, key: keys[i] })).filter((x) => !hit.has(x.key) && x.t.trim());
 
   if (missing.length) {
-    const prompt = `Translate each numbered text into ${target}. They are short questions and answers between university students about coursework.
+    const prompt = ui ? `Translate each numbered text into ${target}. They are interface labels, buttons, headings, hints and messages from Distinction, a website where university students ask short questions and tutors who got a Distinction or High Distinction answer them.
+Write natural, concise interface wording a native speaker would expect on a website. Keep the same length and style (a button stays a short button label).
+Keep these unchanged: people's names, the brand name "Distinction", "My eQuals", course codes (like COMP1511), university names and abbreviations (like UNSW), grade abbreviations (HD, DN, CR, PS), dollar amounts, numbers, email addresses, URLs and anything in {curly braces}.
+Reply with ONLY a JSON array, one object per text in the same order: [{"translated":"...","detected":"English","same":false}]
+
+${missing.map((m, n) => `<text id="${n + 1}">\n${m.t}\n</text>`).join("\n")}` : `Translate each numbered text into ${target}. They are short questions and answers between university students about coursework.
 Keep course codes, code snippets, formulas, numbers and names unchanged. Keep the meaning and tone; don't add anything.
 If a text is already in ${target}, return it unchanged and set "same" to true.
 Reply with ONLY a JSON array, one object per text in the same order: [{"translated":"...","detected":"language name in English","same":false}]
@@ -50,7 +57,7 @@ ${missing.map((m, n) => `<text id="${n + 1}">\n${m.t}\n</text>`).join("\n")}`;
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: MODEL, max_tokens: 8000, messages: [{ role: "user", content: prompt }] }),
+      body: JSON.stringify({ model: MODEL, max_tokens: ui ? 12000 : 8000, messages: [{ role: "user", content: prompt }] }),
     });
     if (!res.ok) { console.error("Anthropic error", res.status, await res.text()); return json({ error: "Translation failed" }, 502); }
     const out = await res.json();
