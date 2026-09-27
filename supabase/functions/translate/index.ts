@@ -26,15 +26,17 @@ Deno.serve(async (req) => {
     global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
   });
   const { data: { user } } = await userClient.auth.getUser();
-  if (!user) return json({ error: "Sign in first." }, 401);
 
   let texts: string[] = [], target = "", mode = "";
   try { ({ texts, target, mode } = await req.json()); } catch { /* checked below */ }
   const ui = mode === "ui";
+  // Signed-out visitors can translate the site's own labels (so the homepage and login switch language),
+  // but not arbitrary content
+  if (!user && !ui) return json({ error: "Sign in first." }, 401);
   const max = ui ? 60 : 20;
   if (!LANGS.includes(target)) return json({ error: "Unsupported language" }, 400);
   if (!Array.isArray(texts) || texts.length === 0 || texts.length > max) return json({ error: `Send 1 to ${max} texts` }, 400);
-  texts = texts.map((t) => String(t ?? "").slice(0, ui ? 600 : 3000));
+  texts = texts.map((t) => String(t ?? "").slice(0, ui ? (user ? 600 : 400) : 3000));
 
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const keys = await Promise.all(texts.map((t) => sha((ui ? "ui\u0000" : "") + target + "\u0000" + t)));
@@ -45,7 +47,7 @@ Deno.serve(async (req) => {
   if (missing.length) {
     const prompt = ui ? `Translate each numbered text into ${target}. They are interface labels, buttons, headings, hints and messages from Distinction, a website where university students ask short questions and tutors who got a Distinction or High Distinction answer them.
 Write natural, concise interface wording a native speaker would expect on a website. Keep the same length and style (a button stays a short button label).
-Keep these unchanged: people's names, the brand name "Distinction", "My eQuals", course codes (like COMP1511), university names and abbreviations (like UNSW), grade abbreviations (HD, DN, CR, PS), dollar amounts, numbers, email addresses, URLs and anything in {curly braces}.
+Keep these unchanged: people's names, Australian university names and abbreviations in English (for example "University of New South Wales", "UNSW", "Monash University"), the brand name "Distinction", "My eQuals", course codes (like COMP1511), university names and abbreviations (like UNSW), grade abbreviations (HD, DN, CR, PS), dollar amounts, numbers, email addresses, URLs and anything in {curly braces}.
 Reply with ONLY a JSON array, one object per text in the same order: [{"translated":"...","detected":"English","same":false}]
 
 ${missing.map((m, n) => `<text id="${n + 1}">\n${m.t}\n</text>`).join("\n")}` : `Translate each numbered text into ${target}. They are short questions and answers between university students about coursework.

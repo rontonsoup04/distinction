@@ -582,3 +582,8 @@ fieldset.goals legend small{font-weight:400;margin-left:4px}
 .tutor-tips ul{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
 .withdraw{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid color-mix(in srgb,currentColor 20%,transparent);padding-top:12px;margin-top:4px;width:100%}
 .withdraw .btn{background:var(--surface);color:var(--ink)}
+.lang-btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:6px 10px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
+.lang-btn:hover{color:var(--ink);border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+.lang-btn .on{color:var(--ink);font-weight:700}
+.lang-btn .sep{opacity:.5}
+.lang-btn svg{margin-right:2px}

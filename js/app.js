@@ -29,6 +29,7 @@
     const { data, error } = await sb.from("universities").select("*").order("name");
     if (error) throw error;
     S.unis = data; S.uniMap = Object.fromEntries(data.map(u => [u.id, u]));
+    if (window.I18N) I18N.protect(data.flatMap(u => [u.name, u.short_name, u.id]));
   }
   async function coursesFor(uni) {
     if (!uni) return [];
@@ -75,9 +76,17 @@
       ...(p.is_admin ? [["admin", "Admin"]] : [])
     ] : [];
     $("#nav").innerHTML = links.map(([r, l]) => `<a href="#/${r}" class="navlink" ${route === r || (r === "tutor" && route === "answer") ? 'aria-current="page"' : ""}>${l}</a>`).join("");
-    $("#auth-area").innerHTML = signedIn
+    const ZH = "Mandarin (Simplified Chinese)", cur = window.I18N ? I18N.lang : "English";
+    const langBtn = `<button class="lang-btn" id="lang-btn" data-notr title="${cur === ZH ? "Switch to English" : "切换到中文"}" aria-label="${cur === ZH ? "Switch to English" : "Switch to Mandarin"}"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 8h13M8 1.5c2 2.2 2 10.8 0 13M8 1.5c-2 2.2-2 10.8 0 13" fill="none" stroke="currentColor" stroke-width="1.3"/></svg><span class="${cur === "English" ? "on" : ""}">EN</span><span class="sep">/</span><span class="${cur === ZH ? "on" : ""}">中文</span></button>`;
+    $("#auth-area").innerHTML = langBtn + (signedIn
       ? `${p && p.onboarded ? `<a class="credit-pill" href="#/credits" title="Your credits">Credits <b>${money(Number(p.credits || 0))}</b></a>` : ""}<button class="avatar-btn" id="me-btn" aria-haspopup="menu"><span class="avatar" aria-hidden="true">${esc(initials(p && p.full_name || S.user.email))}</span><span data-notr>${esc(p ? displayName(p) : "Account")}</span></button>`
-      : `<a class="btn ghost sm" href="#/login">Log in</a><a class="btn primary sm" href="#/signup">Sign up</a>`;
+      : `<a class="btn ghost sm" href="#/login">Log in</a><a class="btn primary sm" href="#/signup">Sign up</a>`);
+    $("#lang-btn").onclick = async () => {
+      const next = (window.I18N && I18N.lang === ZH) ? "English" : ZH;
+      if (window.I18N) I18N.setLang(next);
+      if (S.user && S.profile) { try { await saveProfile({ answer_language: next }); } catch (e) { } }
+      renderHeader(); route();
+    };
     const btn = $("#me-btn");
     if (btn) btn.onclick = e => { e.stopPropagation(); const m = $("#menu"); m.hidden = !m.hidden; };
     $("#menu").innerHTML = signedIn ? `<div class="who">Signed in as<br><b style="color:var(--ink)">${esc(S.user.email)}</b></div><a href="#/profile">Profile and settings</a><a href="#/tutor">Tutor profile</a><button id="signout">Sign out</button>` : "";

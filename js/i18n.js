@@ -7,6 +7,7 @@
   const HAS_LETTERS = /\p{L}{2,}/u;
   const ONLY_CODEY = /^[\s\d$.,:;%·•()+\-–—/×#@|<>"'!?&*_=]*$|^[A-Z]{2,5}\d{3,5}[A-Z]?$/;
   let lang = "English", sb = null, observer = null;
+  const keep = new Set();                // exact texts never translated (university names)
   const done = new WeakMap();            // text node -> {orig, shown}
   const touched = new Set();             // nodes and elements we changed, so a language switch can restore them
   const pending = new Map();             // original text -> [nodes or attr targets]
@@ -17,7 +18,7 @@
   function saveCache() { try { localStorage.setItem("ui-tr:" + lang, JSON.stringify(cache)); } catch (e) { } }
 
   function skip(el) { return !el || (el.closest && el.closest(SKIP)); }
-  function wanted(t) { const s = t.trim(); return s.length > 1 && s.length < 600 && HAS_LETTERS.test(s) && !ONLY_CODEY.test(s); }
+  function wanted(t) { const s = t.trim(); if (keep.has(s)) return false; return s.length > 1 && s.length < 600 && HAS_LETTERS.test(s) && !ONLY_CODEY.test(s); }
 
   // Numbers become {0}, {1}... so "Closes in 12 min" and "Closes in 13 min" share one translation
   function tmpl(t) { const nums = []; const key = t.replace(/\d+(?:[.,]\d+)*/g, m => "{" + (nums.push(m) - 1) + "}"); return { key, nums }; }
@@ -108,5 +109,6 @@
     loadCache(); scan(document.body);
   }
   function initialLang() { try { return localStorage.getItem("ui-lang") || "English"; } catch (e) { return "English"; } }
-  window.I18N = { start, setLang, initialLang, get lang() { return lang; } };
+  function protect(list) { (list || []).forEach(x => { if (x) keep.add(String(x).trim()); }); }
+  window.I18N = { start, setLang, initialLang, protect, get lang() { return lang; } };
 })();
