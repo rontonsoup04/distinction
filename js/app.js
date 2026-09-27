@@ -5,7 +5,7 @@
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit" } });
   window.sb = sb;
 
-  // Features switched off until there are enough tutors
+  // Features switched off until there are enough peer mentors
   const FEATURES = { hdOnly: false, equals: false };
   const REVIEW_MS = 60e3;  // the hold is 3 minutes on the server: 2 to write, then 1 to review and post
   const Q_MAX = 300, Q_MIN = 20, A_MAX = 500, WORD_LIMIT = 50, MAX_FILE = 5 * 1024 * 1024, CLAIM_MIN = 2, URGENT_MIN = 20, PAY = 1.10, URGENT_PAY = 1.70;
@@ -19,7 +19,7 @@
     { v: "expertise", label: "Expertise", hint: "Deeper know-how on the topic" },
     { v: "experience", label: "Experience", hint: "How you studied it, what the exam or assignment was like" },
     { v: "check_work", label: "Check my work", hint: "Look over my working or draft and point out mistakes" },
-    { v: "course_specific", label: "Course-specific", hint: "Only tutors from my uni, in this course or a very close one" },
+    { v: "course_specific", label: "Course-specific", hint: "Only peer mentors from my uni, in this course or a very close one" },
   ];
   const goalLabel = v => (GOALS.find(g => g.v === v) || {}).label || v;
   const goalChips = gs => (gs || []).map(v => `<span class="goalchip${v === "course_specific" ? " uni" : ""}">${esc(goalLabel(v))}</span>`).join("");
@@ -75,7 +75,7 @@
     const p = S.profile, signedIn = !!S.user;
     const here = curPath().split("/")[1] || "";
     const links = signedIn && p && p.onboarded ? [
-      ["ask", "Ask a question"], ["questions", "My questions"], ["tutor", p.tutor_status === "approved" ? "Tutor" : "Become a tutor"], ["credits", "Credits"],
+      ["ask", "Ask a question"], ["questions", "My questions"], ["tutor", p.tutor_status === "approved" ? "Peer mentor" : "Become a peer mentor"], ["credits", "Credits"],
       ...(p.is_admin ? [["admin", "Admin"]] : [])
     ] : [];
     $("#nav").innerHTML = links.map(([r, l]) => `<a href="/${r}" class="navlink" ${here === r || (r === "tutor" && here === "answer") ? 'aria-current="page"' : ""}>${l}</a>`).join("");
@@ -92,7 +92,7 @@
     };
     const btn = $("#me-btn");
     if (btn) btn.onclick = e => { e.stopPropagation(); const m = $("#menu"); m.hidden = !m.hidden; };
-    $("#menu").innerHTML = signedIn ? `<div class="who">Signed in as<br><b style="color:var(--ink)">${esc(S.user.email)}</b></div><a href="/profile">Profile and settings</a><a href="/tutor">Tutor profile</a><button id="signout">Sign out</button>` : "";
+    $("#menu").innerHTML = signedIn ? `<div class="who">Signed in as<br><b style="color:var(--ink)">${esc(S.user.email)}</b></div><a href="/profile">Profile and settings</a><a href="/tutor">Peer mentor profile</a><button id="signout">Sign out</button>` : "";
     const so = $("#signout"); if (so) so.onclick = async () => { $("#menu").hidden = true; await sb.auth.signOut(); toast("Signed out"); go("/"); };
   }
   document.addEventListener("click", e => { if (!e.target.closest("#menu") && !e.target.closest("#me-btn")) $("#menu").hidden = true; });
@@ -181,7 +181,7 @@
           <h1 class="rotor" id="rotor" data-notr></h1>
           <p class="fast"><span class="pulse" aria-hidden="true"></span>Receive an answer in a couple of minutes</p>
           <p class="muted" style="max-width:52ch;margin-top:12px">Pick your uni and course, ask a short question, and it goes to students who got a Distinction or High Distinction in that exact course, and in similar courses at other unis. Standard questions are usually answered within an hour, and urgent ones within 20 minutes.</p>
-          <div class="cta-row"><a class="btn primary" href="/signup">Become a tutor</a><a class="btn" href="/signup">Ask your first question free</a><a class="btn ghost" href="/login">Log in</a></div>
+          <div class="cta-row"><a class="btn primary" href="/signup">Become a peer mentor</a><a class="btn" href="/signup">Ask your first question free</a><a class="btn ghost" href="/login">Log in</a></div>
         </div>
         <div class="q demo-q" role="figure" aria-label="Example question and answer">
           <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">INFS2608</span><span class="q-time">UNSW · 2 min ago</span></span><span class="q-exp live">Urgent</span></div>
@@ -191,10 +191,10 @@
         </div>
       </div>
       <div class="two-up">
-        <div class="panel feature"><span class="eyebrow">For students</span><h2>Answers from people who aced your course</h2><ul><li>Pick your uni and course from 40 Australian universities</li><li>300-character questions with one PDF or image</li><li>Every tutor with a D or HD in your course, or a similar one, can see and claim it</li><li>Get 2, 3 or 5 answers. Rate each one.</li><li><b>Your first question is free.</b></li></ul><a class="btn primary" href="/signup" style="align-self:flex-start">Sign up as a student</a></div>
-        <div class="panel feature tutors-panel"><div class="row" style="justify-content:space-between;align-items:center;gap:8px"><span class="eyebrow">For tutors</span><span class="hiring-tag"><span class="pulse" aria-hidden="true"></span>Now recruiting</span></div><h2>Get paid to answer questions you already know</h2><ul><li>Upload your transcript. Our AI approves every course where you got a D or HD.</li><li>Claim a question and answer it in 2 minutes, with short messages and by drawing on the student's document.</li><li>Earn $1 to $2 for every 2-minute answer. That's roughly $33 to $51 an hour while you're answering.</li></ul><p class="muted" style="font-size:13px">Create a free account first, then apply to tutor from your account.</p><a class="btn" href="/signup" style="align-self:flex-start">Create an account</a></div>
+        <div class="panel feature"><span class="eyebrow">For students</span><h2>Answers from people who aced your course</h2><ul><li>Pick your uni and course from 40 Australian universities</li><li>300-character questions with one PDF or image</li><li>Every peer mentor with a D or HD in your course, or a similar one, can see and claim it</li><li>Get 2, 3 or 5 answers. Rate each one.</li><li><b>Your first question is free.</b></li></ul><a class="btn primary" href="/signup" style="align-self:flex-start">Sign up as a student</a></div>
+        <div class="panel feature tutors-panel"><div class="row" style="justify-content:space-between;align-items:center;gap:8px"><span class="eyebrow">For peer mentors</span><span class="hiring-tag"><span class="pulse" aria-hidden="true"></span>Now recruiting</span></div><h2>Get paid to answer questions you already know</h2><ul><li>Upload your transcript. Our AI approves every course where you got a D or HD.</li><li>Claim a question and answer it in 2 minutes, with short messages and by drawing on the student's document.</li><li>Earn $1 to $2 for every 2-minute answer. That's roughly $33 to $51 an hour while you're answering.</li></ul><p class="muted" style="font-size:13px">Create a free account first, then apply to become a peer mentor from your account.</p><a class="btn" href="/signup" style="align-self:flex-start">Create an account</a></div>
       </div>
-      <div class="faq"><h2>Common questions</h2><details class="faq-item"><summary>How accurate and reliable are the answers?</summary><p>Every tutor got a Distinction (75+) or High Distinction (85+) in your course, or a very similar one, read straight from their transcript by our AI. Each answer shows the tutor's mark and rating, and you can get 2, 3 or 5 answers to compare. Tutors are students, so double-check anything important against your course materials.</p></details><details class="faq-item"><summary>Is it safe to hand in my transcript?</summary><p>Yes. Our AI only reads the course codes and marks. It's set up to ignore your name, student number, address and date of birth, and the file is deleted from our records as soon as it's read. Only your courses and marks are kept, and they're only shown next to your answers.</p></details><details class="faq-item"><summary>How fast will I get an answer?</summary><p>Tutors get 2 minutes to answer once they claim your question, so answers often arrive within minutes. Standard questions are usually answered within an hour. Tick Urgent and answers come within 20 minutes.</p></details><details class="faq-item"><summary>What does it cost, and what if nobody answers?</summary><p>Your first question is free. After that, questions start at $3 for 2 answers. You only pay for answers you receive: when your question closes, any unanswered spots are refunded to your credits automatically. You can close a question early at any time.</p></details><details class="faq-item"><summary>Is this cheating?</summary><p>No. Distinction is for understanding: explaining a concept, spotting a mistake, or hearing how someone approached the course. Tutors won't write assessable work for you, and questions are capped at 300 characters to keep them focused. Always follow your university's academic integrity rules.</p></details><details class="faq-item"><summary>How do you stop AI-written answers?</summary><p>Tutors have to type every answer themselves. Pasting is turned off, the question can't be copied, and they only get 2 minutes. Every answer is also checked for AI writing. Flagged answers are reviewed, and tutors with repeated flags are paused.</p></details><details class="faq-item"><summary>Who can become a tutor, and how do they get paid?</summary><p>Anyone with a D or HD in a course can tutor it. Upload your transcript and our AI approves you in about 20 seconds. You get 2 minutes per answer and earn $1 to $2 each, so while you're answering that works out to roughly $33 to $51 an hour, with the top end from early bird questions. How much you make depends on how many questions come in for your courses, so turn on email alerts to catch them. Earnings are tracked from your first answer, and payouts to your bank account are being set up.</p></details><details class="faq-item"><summary>Can I ask in another language?</summary><p>Yes. Choose your language in your profile and the whole site switches to it. Questions and answers written in other languages are translated for you automatically, with a Show original button.</p></details></div>
+      <div class="faq"><h2>Common questions</h2><details class="faq-item"><summary>How accurate and reliable are the answers?</summary><p>Every peer mentor got a Distinction (75+) or High Distinction (85+) in your course, or a very similar one, read straight from their transcript by our AI. Each answer shows the peer mentor's mark and rating, and you can get 2, 3 or 5 answers to compare. Peer mentors are students, so double-check anything important against your course materials.</p></details><details class="faq-item"><summary>Is it safe to hand in my transcript?</summary><p>Yes. Our AI only reads the course codes and marks. It's set up to ignore your name, student number, address and date of birth, and the file is deleted from our records as soon as it's read. Only your courses and marks are kept, and they're only shown next to your answers.</p></details><details class="faq-item"><summary>How fast will I get an answer?</summary><p>Peer mentors get 2 minutes to answer once they claim your question, so answers often arrive within minutes. Standard questions are usually answered within an hour. Tick Urgent and answers come within 20 minutes.</p></details><details class="faq-item"><summary>What does it cost, and what if nobody answers?</summary><p>Your first question is free. After that, questions start at $3 for 2 answers. You only pay for answers you receive: when your question closes, any unanswered spots are refunded to your credits automatically. You can close a question early at any time.</p></details><details class="faq-item"><summary>Is this cheating?</summary><p>No. Distinction is for understanding: explaining a concept, spotting a mistake, or hearing how someone approached the course. Peer mentors won't write assessable work for you, and questions are capped at 300 characters to keep them focused. Always follow your university's academic integrity rules.</p></details><details class="faq-item"><summary>How do you stop AI-written answers?</summary><p>Peer mentors have to type every answer themselves. Pasting is turned off, the question can't be copied, and they only get 2 minutes. Every answer is also checked for AI writing. Flagged answers are reviewed, and peer mentors with repeated flags are paused.</p></details><details class="faq-item"><summary>Who can become a peer mentor, and how do they get paid?</summary><p>Anyone with a D or HD in a course can mentor it. Upload your transcript and our AI approves you in about 20 seconds. You get 2 minutes per answer and earn $1 to $2 each, so while you're answering that works out to roughly $33 to $51 an hour, with the top end from early bird questions. How much you make depends on how many questions come in for your courses, so turn on email alerts to catch them. Earnings are tracked from your first answer, and payouts to your bank account are being set up.</p></details><details class="faq-item"><summary>Can I ask in another language?</summary><p>Yes. Choose your language in your profile and the whole site switches to it. Questions and answers written in other languages are translated for you automatically, with a Show original button.</p></details></div>
     </section>`;
     paintDemo(); startRotor();
   }
@@ -202,7 +202,7 @@
   // Homepage headlines: cycle every few seconds. Hand-written Mandarin; other languages use the automatic translator.
   const HEADLINES = [
     ["Ask about any course. Get answers from students with an <em>HD</em>.", "任何课程都能问。<em>HD</em> 学长学姐来回答。"],
-    ["ChatGPT and Claude answer from the whole internet. Our tutors <em>aced your course</em>.", "ChatGPT 和 Claude 的答案来自整个互联网。我们的导师<em>在你的课程拿过高分</em>。"],
+    ["ChatGPT and Claude answer from the whole internet. Our peer mentors <em>aced your course</em>.", "ChatGPT 和 Claude 的答案来自整个互联网。我们的学长学姐<em>在你的课程拿过高分</em>。"],
     ["Stuck at 11pm? An <em>HD student</em> answers in minutes.", "深夜卡住了？<em>HD 学生</em>几分钟内回复你。"],
     ["Learn from the students who <em>topped your course</em>.", "向<em>在你的课程拿到最高分</em>的同学请教。"],
     ["Not a generic answer. One from someone who <em>sat your exam</em>.", "不是泛泛的答案，而是来自<em>考过同一门考试</em>的人。"]
@@ -277,7 +277,7 @@
   function pageSignup() {
     app().innerHTML = `<div class="narrow"><form class="panel auth-card" id="f" novalidate>
       <h1>Create your account</h1>
-      <p class="muted" style="font-size:14px">Every account starts as a student account. Once you're set up, you can apply to tutor the courses you aced.</p>
+      <p class="muted" style="font-size:14px">Every account starts as a student account. Once you're set up, you can apply to become a peer mentor for the courses you aced.</p>
       <button type="button" class="btn block google" id="g">${GOOGLE_SVG}Sign up with Google</button>
       <div class="divider">or</div>
       <label class="field"><span>Full name</span><input type="text" id="name" autocomplete="name" required></label>
@@ -351,14 +351,14 @@
     ["Punjabi", "Punjabi · ਪੰਜਾਬੀ"], ["Malay", "Malay · Bahasa Melayu"]
   ];
   const langValue = v => LANGS.some(l => l[0] === v) ? v : "English";
-  // parts: about (names), studies (uni, degree, year), prefs (language, heard), bio (tutor intro)
+  // parts: about (names), studies (uni, degree, year), prefs (language, heard), bio (peer mentor intro)
   async function profileFields(root, p, opts = {}) {
     const parts = opts.parts || ["about", "studies", "prefs"];
     const has = k => parts.includes(k);
     root.innerHTML = `
       ${has("about") ? `<div class="two">
         <label class="field"><span>Full name</span><input type="text" id="pf-name" value="${esc(p.full_name || "")}" autocomplete="name"></label>
-        <label class="field"><span>Display name</span><input type="text" id="pf-display" value="${esc(p.display_name || "")}" placeholder="e.g. Alex C." maxlength="30"><small>This is what ${opts.tutor ? "students" : "tutors"} see.</small></label>
+        <label class="field"><span>Display name</span><input type="text" id="pf-display" value="${esc(p.display_name || "")}" placeholder="e.g. Alex C." maxlength="30"><small>This is what ${opts.tutor ? "students" : "peer mentors"} see.</small></label>
       </div>` : ""}
       ${has("studies") ? `<div class="field"><span id="pf-uni-lbl">University</span><div id="pf-uni" data-label="pf-uni-lbl"></div></div>
       <div class="field"><span id="pf-degree-lbl">Degree</span><div id="pf-degree" data-label="pf-degree-lbl"></div><small>Can't find yours? Type it in the search box.</small></div>
@@ -401,11 +401,11 @@
     return data;
   }
 
-  /* Student sign-up: three short steps, like the tutor application */
+  /* Student sign-up: three short steps, like the peer mentor application */
   async function pageWelcome() {
     const p = S.profile;
     const W = { step: 1 };
-    const STEPS = [["About you", ["about"], "What should tutors call you?"], ["Your studies", ["studies"], "This helps us send your questions to the right people."], ["Preferences", ["prefs"], "Choose your language. The whole site is shown in it, and questions and answers written in other languages are translated for you."]];
+    const STEPS = [["About you", ["about"], "What should peer mentors call you?"], ["Your studies", ["studies"], "This helps us send your questions to the right people."], ["Preferences", ["prefs"], "Choose your language. The whole site is shown in it, and questions and answers written in other languages are translated for you."]];
     app().innerHTML = `<div class="medium"><div class="col">
       <div><span class="eyebrow">Student sign-up</span><h1 style="font-size:30px;margin-top:4px">Set up your student account</h1></div>
       <div class="steps" id="steps"></div><div class="panel" id="body"></div>
@@ -436,9 +436,9 @@
         <h2 style="font-size:26px">You're all set, ${esc(displayName(S.profile))}</h2>
         <p class="muted">You can now ask questions about any course. Questions are paid with credits, starting at $3 for 2 answers.</p>
         <a class="btn primary" href="/ask">Ask a question</a></div>`;
-      $("#body").insertAdjacentHTML("afterend", `<div class="panel" style="gap:10px"><span class="eyebrow">Optional</span><h2 style="font-size:22px">Got a D or HD in a course? Earn by tutoring it.</h2>
+      $("#body").insertAdjacentHTML("afterend", `<div class="panel" style="gap:10px"><span class="eyebrow">Optional</span><h2 style="font-size:22px">Got a D or HD in a course? Earn by mentoring it.</h2>
         <p class="muted" style="font-size:14px">Get paid to answer questions you already know. Earn $1 to $2 for every 2-minute answer in the courses you aced. Upload your transcript and our AI approves you in about 20 seconds.</p>
-        <div class="row"><a class="btn" href="/tutor/apply">Apply to tutor</a><a class="btn ghost" href="/ask">Maybe later</a></div></div>`);
+        <div class="row"><a class="btn" href="/tutor/apply">Apply to be a peer mentor</a><a class="btn ghost" href="/ask">Maybe later</a></div></div>`);
       window.scrollTo(0, 0);
     }
     render();
@@ -472,7 +472,7 @@
           <div class="how" style="margin-top:22px">
             <div><span class="stepno">1 · PICK</span><b>Uni and course</b><p>Choose your uni and course, write up to 300 characters and attach one file.</p></div>
             <div><span class="stepno">2 · CHOOSE</span><b>Who answers</b><p>Everyone who got a D or HD in that course or a similar one.</p></div>
-            <div><span class="stepno">3 · GET</span><b>Answers</b><p>Tutors reply in short messages and can mark up your PDF or image directly.</p></div>
+            <div><span class="stepno">3 · GET</span><b>Answers</b><p>Peer mentors reply in short messages and can mark up your PDF or image directly.</p></div>
           </div>
           <a class="recruit" href="/tutor"><span><b>Got an HD?</b> Get paid to answer questions you already know: $1 to $2 for every 2-minute answer.</span><span class="recruit-go">Start earning →</span></a>
         </div>
@@ -534,7 +534,7 @@
       // every variant is laid out in the same spot, so the tallest one sets the height and nothing below moves
       const uni = uniShort(uniSel2.value) || "your uni";
       const variants = [[false, false], [true, false], [false, true], [true, true]].map(([h, u]) =>
-        `${h ? "Only tutors who got an HD (85+)" : "Tutors who got a D or HD"} ${u ? `in this course at ${uni}, or a very close course there` : "in this course, or a similar course at any uni"}, can see and claim it.${h || u ? " Fewer tutors, so answers may take a little longer." : ""}`);
+        `${h ? "Only peer mentors who got an HD (85+)" : "Peer mentors who got a D or HD"} ${u ? `in this course at ${uni}, or a very close course there` : "in this course, or a similar course at any uni"}, can see and claim it.${h || u ? " Fewer peer mentors, so answers may take a little longer." : ""}`);
       const cur = (hd ? 1 : 0) + (uniOnly ? 2 : 0);
       $$("#a-grade-note span").forEach((el, i) => { el.textContent = variants[i]; el.toggleAttribute("hidden-note", i !== cur); });
     }
@@ -563,7 +563,7 @@
       const code = courseSel.value, uni = uniSel2.value, text = $("#a-text").value.trim(), n = text.length;
       if (!uni) return status(st, "Choose your university.", "err");
       if (!validCode(code)) return status(st, "Pick a course from the list, or type its code in the search box.", "err");
-      if (n < Q_MIN) return status(st, "Write a bit more so tutors know what you're stuck on.", "err");
+      if (n < Q_MIN) return status(st, "Write a bit more so peer mentors know what you're stuck on.", "err");
       if (n > Q_MAX) return status(st, `Your question is ${n} characters. Cut it to ${Q_MAX} or fewer.`, "err");
       const fullCost = priceFor(+document.querySelector('input[name="a-count"]:checked').value, $("#a-urgent").checked, isHD());
       const cost = Number(p.free_questions || 0) > 0 ? Math.max(0, fullCost - 3) : fullCost;
@@ -615,7 +615,7 @@
       <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniShort(q.uni_id))} · ${ago(q.created_at)}</span></span><span class="q-exp${closed ? "" : " live"}">${left(q.expires_at)}</span></div>
       <p class="q-text">${esc(q.body)}</p>
       <div class="q-pay"><span class="slotbar">${Array.from({ length: q.slots }, (_, i) => `<i class="${i < n ? "on" : ""}"></i>`).join("")}</span><span>${n} of ${q.slots} answers</span>${q.urgent ? '<span class="tagchip">Urgent</span>' : ""}${q.attachment_name ? '<span class="tagchip">Attachment</span>' : ""}</div>
-      ${ans.length ? `<div class="ans-preview">${ans.map(a => `<div class="ap"><b data-notr>${esc(S.names[a.tutor_id] || "Tutor")}</b><span>${esc((a.bubbles || []).join(" ").slice(0, 140))}${(a.bubbles || []).join(" ").length > 140 ? "…" : ""}</span></div>`).join("")}</div>` : ""}
+      ${ans.length ? `<div class="ans-preview">${ans.map(a => `<div class="ap"><b data-notr>${esc(S.names[a.tutor_id] || "Peer mentor")}</b><span>${esc((a.bubbles || []).join(" ").slice(0, 140))}${(a.bubbles || []).join(" ").length > 140 ? "…" : ""}</span></div>`).join("")}</div>` : ""}
       ${S.drafting && S.drafting[q.id] ? `<div class="drafting"><span class="spin"></span><span>${esc(S.drafting[q.id].join(", "))} ${S.drafting[q.id].length > 1 ? "are" : "is"} drafting up the answer<span class="dots"></span></span></div>` : ""}
       <span class="q-open">${n ? "Open to see full answers" : "Open question"} →</span>
     </article></a>`;
@@ -638,7 +638,7 @@
 
   /* AI transcript scan: animated progress while the scan-transcript function runs (10 to 20 seconds) */
   function scanAnimation(el) {
-    const STEPS = ["Opening your transcript", "Finding course codes", "Reading marks and grades", "Checking which courses you can tutor"];
+    const STEPS = ["Opening your transcript", "Finding course codes", "Reading marks and grades", "Checking which courses you can mentor"];
     el.innerHTML = `<div class="scan" role="status" aria-live="polite">
       <div class="scan-doc" aria-hidden="true">${Array.from({ length: 9 }, (_, i) => `<i style="width:${[80, 55, 70, 62, 76, 48, 68, 58, 72][i]}%"></i>`).join("")}<div class="scan-beam"></div></div>
       <div class="scan-body"><div class="scan-title"><span class="ai-spark" aria-hidden="true">✦</span> AI is reading your transcript</div>
@@ -676,7 +676,7 @@
             <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</span></span><span class="q-exp" data-exp="${q.expires_at}">${left(q.expires_at)}</span></div>
             <p class="q-text" style="font-size:17px">${esc(q.body)}</p>
             ${mine && new Date(q.expires_at) > new Date() ? `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">Closes automatically ${left(q.expires_at).replace("Closes in", "in")}. Got what you needed?</span><button class="btn sm" id="close-q">Close question</button></div>` : ""}
-            <div class="q-pay">${[q.urgent ? "Urgent" : null, q.min_mark >= 85 ? "HD only" : "Open to D and HD tutors", q.wide === false ? "Your uni only" : "Similar courses included"].filter(Boolean).map(t => `<span class="tagchip">${t}</span>`).join("")}</div>
+            <div class="q-pay">${[q.urgent ? "Urgent" : null, q.min_mark >= 85 ? "HD only" : "Open to D and HD peer mentors", q.wide === false ? "Your uni only" : "Similar courses included"].filter(Boolean).map(t => `<span class="tagchip">${t}</span>`).join("")}</div>
             ${(q.goals || []).length ? `<div class="goals-row"><span class="muted">You're after</span>${goalChips(q.goals)}</div>` : ""}
           </article>
           ${q.attachment_path ? `<div class="answer-tabs" id="ann-tabs"></div><div id="doc"></div>` : ""}
@@ -759,7 +759,7 @@
       }
     });
     const cq = $("#close-q");
-    if (cq) cq.onclick = () => openModal(`<h3>Close this question?</h3><p class="muted" style="font-size:14px">Tutors won't be able to answer it any more. Answers you've already received stay here, and credits for unanswered spots are refunded to you now.</p><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Keep it open</button><button class="btn primary" id="cq-go">Close question</button></div>`, m => {
+    if (cq) cq.onclick = () => openModal(`<h3>Close this question?</h3><p class="muted" style="font-size:14px">Peer mentors won't be able to answer it any more. Answers you've already received stay here, and credits for unanswered spots are refunded to you now.</p><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Keep it open</button><button class="btn primary" id="cq-go">Close question</button></div>`, m => {
       $("#cq-go", m).onclick = async () => {
         const { data, error } = await sb.rpc("close_question", { q_id: id });
         if (error) return toast(errMsg(error));
@@ -878,31 +878,31 @@
     const { data, error } = await sb.rpc("unsubscribe_alerts", { p_user: uid, p_token: token });
     if (S.user && S.user.id === uid && data) await loadProfile();
     app().innerHTML = `<div class="medium"><div class="panel pending-card">${!error && data
-      ? `<span class="status-pill approved">Done</span><h1 style="font-size:26px">Email alerts are off</h1><p class="muted">You won't get emails about new questions any more. You can turn them back on from your tutor profile whenever you like.</p>`
-      : `<span class="status-pill rejected">Link didn't work</span><h1 style="font-size:26px">We couldn't turn off alerts from this link</h1><p class="muted">Log in and switch off email alerts on your tutor profile instead.</p>`}
-      <a class="btn" href="/tutor">Go to tutor profile</a></div></div>`;
+      ? `<span class="status-pill approved">Done</span><h1 style="font-size:26px">Email alerts are off</h1><p class="muted">You won't get emails about new questions any more. You can turn them back on from your peer mentor profile whenever you like.</p>`
+      : `<span class="status-pill rejected">Link didn't work</span><h1 style="font-size:26px">We couldn't turn off alerts from this link</h1><p class="muted">Log in and switch off email alerts on your peer mentor profile instead.</p>`}
+      <a class="btn" href="/tutor">Go to peer mentor profile</a></div></div>`;
   }
 
   /* Warning shown when an answer looks AI-written */
   function aiWarning(score) {
     openModal(`<h3>⚠ This answer looked AI-written</h3>
       <p style="font-size:14px">Our check rated your last answer <b>${score}% likely to be AI-generated</b>. Answers on Distinction must be your own words, typed by you.</p>
-      <p class="muted" style="font-size:14px">The answer was still sent and paid, but it's been flagged. <b>3 flags within 30 days pauses your tutoring</b> until we review it.</p>
+      <p class="muted" style="font-size:14px">The answer was still sent and paid, but it's been flagged. <b>3 flags within 30 days pauses your mentoring</b> until we review it.</p>
       <div class="row" style="justify-content:flex-end"><button class="btn primary" data-close id="ai-ok">I understand</button></div>`, m => { $("#ai-ok", m).addEventListener("click", () => sb.rpc("dismiss_ai_warnings")); });
   }
 
-  /* Ask tutors (once) whether they want emails about new questions */
+  /* Ask peer mentors (once) whether they want emails about new questions */
   function askAlerts() {
     openModal(`<h3>Get an email when a question comes in?</h3>
       <p class="muted" style="font-size:14px">We'll email ${esc(S.user.email)} when a student asks a question in one of your courses, so you don't have to keep checking the site. First to claim gets the spot. At most one email every few minutes, and you can turn this off anytime.</p>
       <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="al-no">Not now</button><button class="btn primary" id="al-yes">Yes, email me</button></div>`, m => {
-      const set = async on => { try { await saveProfile({ email_alerts: on, alerts_asked: true, email_alerts_at: on ? new Date().toISOString() : null }); closeModal(); toast(on ? "Email alerts are on" : "No problem. You can turn alerts on from your tutor profile."); if ($("#al-toggle")) $("#al-toggle").checked = on; } catch (e) { toast(errMsg(e)); } };
+      const set = async on => { try { await saveProfile({ email_alerts: on, alerts_asked: true, email_alerts_at: on ? new Date().toISOString() : null }); closeModal(); toast(on ? "Email alerts are on" : "No problem. You can turn alerts on from your peer mentor profile."); if ($("#al-toggle")) $("#al-toggle").checked = on; } catch (e) { toast(errMsg(e)); } };
       $("#al-yes", m).onclick = () => set(true);
       $("#al-no", m).onclick = () => set(false);
     });
   }
 
-  /* ---------------- tutor ---------------- */
+  /* ---------------- peer mentor ---------------- */
   async function pageTutor() {
     const p = S.profile;
     if (!p.onboarded || p.tutor_status === "none") return tutorPitch();
@@ -914,9 +914,9 @@
   function tutorPitch() {
     app().innerHTML = `<section class="view"><div class="intro"><div>
       <h1>Get paid to answer questions you already know.</h1>
-      <p>Upload your transcript and our AI reads your marks in about 20 seconds. Every course where you got a Distinction (75+) or High Distinction becomes a course you can tutor, straight away. Earn $1 to $2 for every 2-minute answer, or roughly $33 to $51 an hour while you're answering. Turn on email alerts and answer between classes.</p>
-      <div class="cta-row"><a class="btn primary" href="/tutor/apply">Apply to tutor</a></div></div>
-      <div class="how"><div><span class="stepno">STEP 1</span><b>Profile</b><p>Your uni, degree and a short intro.</p></div><div><span class="stepno">STEP 2</span><b>Transcript</b><p>Upload it. AI reads your courses and marks, then the file is deleted.</p></div><div><span class="stepno">STEP 3</span><b>Start tutoring</b><p>Approved instantly for every course at 75 or above.</p></div></div>
+      <p>Upload your transcript and our AI reads your marks in about 20 seconds. Every course where you got a Distinction (75+) or High Distinction becomes a course you can mentor, straight away. Earn $1 to $2 for every 2-minute answer, or roughly $33 to $51 an hour while you're answering. Turn on email alerts and answer between classes.</p>
+      <div class="cta-row"><a class="btn primary" href="/tutor/apply">Apply to be a peer mentor</a></div></div>
+      <div class="how"><div><span class="stepno">STEP 1</span><b>Profile</b><p>Your uni, degree and a short intro.</p></div><div><span class="stepno">STEP 2</span><b>Transcript</b><p>Upload it. AI reads your courses and marks, then the file is deleted.</p></div><div><span class="stepno">STEP 3</span><b>Start mentoring</b><p>Approved instantly for every course at 75 or above.</p></div></div>
     </div></section>`;
   }
   async function tutorPending() {
@@ -934,7 +934,7 @@
   }
 
   function tutorPaused() {
-    app().innerHTML = `<div class="medium"><div class="panel pending-card"><span class="status-pill rejected">Tutoring paused</span><h1 style="font-size:28px">Your tutoring is paused</h1>
+    app().innerHTML = `<div class="medium"><div class="panel pending-card"><span class="status-pill rejected">Mentoring paused</span><h1 style="font-size:28px">Your mentoring is paused</h1>
       <p>Three of your answers in the last 30 days were flagged as likely AI-written, so you can't see or claim questions for now. Answers on Distinction must be your own words, typed by you.</p>
       <p class="muted">Think this is a mistake? Email <a href="mailto:support@hdistinction.live">support@hdistinction.live</a> and we'll review your answers. Your earnings so far are safe, and you can still ask questions.</p>
       <a class="btn" href="/ask">Ask a question</a></div></div>`;
@@ -942,7 +942,7 @@
 
   async function tutorDashboard() {
     const p = S.profile;
-    app().innerHTML = `<div class="boot">Loading your tutor profile…</div>`;
+    app().innerHTML = `<div class="boot">Loading your peer mentor profile…</div>`;
     const [{ data: st }, { data: tcs }, { data: revs }] = await Promise.all([
       sb.rpc("tutor_stats", { t: S.user.id }),
       sb.from("tutor_courses").select("*").eq("tutor_id", S.user.id).eq("status", "approved").order("mark", { ascending: false }),
@@ -963,11 +963,11 @@
           <label class="check"><input type="checkbox" id="al-toggle" ${p.email_alerts ? "checked" : ""}><span>Email me at <b>${esc(S.user.email)}</b> when a question comes in for my courses</span></label>
           <small class="muted">Be first to claim it. At most one email every few minutes.</small></div>
         ${!FEATURES.equals || p.equals_verified ? "" : `<div class="panel" style="gap:10px"><h3 style="font-size:18px">Get the ✓ My eQuals checkmark</h3>
-          <p class="muted" style="font-size:14px">${p.myequals_link ? "Thanks. We're checking your link and will add the checkmark once it matches your transcript." : "Share your transcript from My eQuals and paste the link. Verified tutors stand out to students."}</p>
+          <p class="muted" style="font-size:14px">${p.myequals_link ? "Thanks. We're checking your link and will add the checkmark once it matches your transcript." : "Share your transcript from My eQuals and paste the link. Verified peer mentors stand out to students."}</p>
           <div class="row"><input type="url" id="eq-link" value="${esc(p.myequals_link || "")}" placeholder="https://www.myequals.edu.au/…" style="flex:1;min-width:180px"><button class="btn sm" id="eq-save">${p.myequals_link ? "Update" : "Save link"}</button></div>
           <details><summary style="cursor:pointer;font-size:13px">How do I get a My eQuals link?</summary><ol style="margin:8px 0 0;padding-left:20px;font-size:13px;display:flex;flex-direction:column;gap:4px"><li>Order an official transcript from your uni. At UNSW, current students pay $20 and it's ready within 5 working days.</li><li>Open the email from My eQuals and sign in at myequals.edu.au.</li><li>Open your transcript, choose Share, then Public link (no PIN), with at least 30 days' expiry.</li><li>Copy the link and paste it here.</li></ol></details>
           <div id="eq-st" hidden></div></div>`}
-        <div class="panel" style="gap:10px"><div class="row" style="justify-content:space-between"><h3 style="font-size:18px">Courses I can tutor</h3><a href="/tutor/apply">Add courses</a></div>
+        <div class="panel" style="gap:10px"><div class="row" style="justify-content:space-between"><h3 style="font-size:18px">Courses I can mentor</h3><a href="/tutor/apply">Add courses</a></div>
           <ul class="courses">${(tcs || []).map(x => `<li><span class="code">${esc(x.code)}</span><span class="ttl" title="${esc(x.title)}">${esc(x.title)}</span><span class="grade">${x.mark}<span class="badge ${gcls(x.grade || gradeFor(x.mark))}">${esc(x.grade || gradeFor(x.mark))}</span></span></li>`).join("")}</ul>
           <small class="muted">You'll see questions in these courses and in similar courses at any uni.</small></div>
         <div class="panel" style="gap:4px"><h3 style="font-size:18px;margin-bottom:6px">Reviews</h3>
@@ -979,7 +979,7 @@
           <div class="withdraw"><div><div class="eyebrow" style="color:inherit;opacity:.7">Available to withdraw</div><div class="earn-amt" id="avail">…</div><small id="w-note" style="opacity:.8"></small></div><button class="btn" id="w-btn" disabled>Withdraw</button></div></div>
         <div class="pitch"><div class="pitch-main"><span class="eyebrow">Your earning potential</span><div class="pitch-big"><b>$1–2</b> every 2 minutes</div><p>Questions are 300 characters or less, and you get 2 minutes to answer once you claim one. That's roughly $33 to $51 an hour while you're answering. Look for the early bird tag for the top rate, and turn on email alerts to answer from your phone between classes.</p><div class="pitch-now">This week: <b>${s.week_count || 0}</b> answer${s.week_count === 1 ? "" : "s"}</div></div>
           <div class="goals"><div class="goal"><div class="row" style="justify-content:space-between"><b>Weekly goal</b><span class="mono">${Math.min(20, s.week_count || 0)}/20</span></div><div class="meter"><i style="width:${Math.min(100, (s.week_count || 0) * 5)}%"></i></div><small>Answer 20 questions this week to hit your goal.</small></div></div></div>
-        <div class="tutor-tips" role="note"><b>Before you claim</b><ul><li>Only claim questions you're confident answering. You'll have 2 minutes, and students rate every answer.</li><li>Answer in your own words. AI-written answers are flagged, and repeated flags pause your tutoring.</li></ul></div>
+        <div class="tutor-tips" role="note"><b>Before you claim</b><ul><li>Only claim questions you're confident answering. You'll have 2 minutes, and students rate every answer.</li><li>Answer in your own words. AI-written answers are flagged, and repeated flags pause your mentoring.</li></ul></div>
         <div id="ai-banner"></div>
         <a class="my-answers-link" href="/tutor/answers"><span><b>Your answers</b><span class="muted"> · ${s.answers_count || 0} so far</span></span><span>View all →</span></a>
         <div class="results-head"><h2>Ready to claim</h2><span class="muted" style="font-size:13px">You can hold one question at a time</span></div>
@@ -992,7 +992,7 @@
     if (!p.alerts_asked) setTimeout(askAlerts, 600);
     sb.from("answer_checks").select("ai_score, created_at").eq("flagged", true).eq("seen", false).order("created_at", { ascending: false }).then(({ data }) => {
       if (!data || !data.length || !$("#ai-banner")) return;
-      $("#ai-banner").innerHTML = `<div class="status err ai-banner"><span><b>${data.length === 1 ? "One of your answers" : data.length + " of your answers"} looked AI-written</b> (up to ${Math.max(...data.map(x => x.ai_score))}%). Answers must be your own words. 3 flags within 30 days pauses your tutoring.</span><button class="btn sm" id="ai-dismiss">Got it</button></div>`;
+      $("#ai-banner").innerHTML = `<div class="status err ai-banner"><span><b>${data.length === 1 ? "One of your answers" : data.length + " of your answers"} looked AI-written</b> (up to ${Math.max(...data.map(x => x.ai_score))}%). Answers must be your own words. 3 flags within 30 days pauses your mentoring.</span><button class="btn sm" id="ai-dismiss">Got it</button></div>`;
       $("#ai-dismiss").onclick = async () => { await sb.rpc("dismiss_ai_warnings"); $("#ai-banner").innerHTML = ""; };
     });
     const eqSave = $("#eq-save");
@@ -1017,10 +1017,10 @@
       }
     });
   }
-  /* Tutor's answer history */
+  /* Peer mentor's answer history */
   async function pageMyAnswers() {
     if (!S.profile || S.profile.tutor_status !== "approved") { go("/tutor"); return; }
-    app().innerHTML = `<section class="view"><a href="/tutor">← Tutor dashboard</a><div class="results-head"><h1 style="font-size:30px">Your answers</h1></div><div class="col" id="ma-list"><div class="boot">Loading…</div></div><div class="row" style="justify-content:center"><button class="btn" id="ma-more" hidden>Load more</button></div></section>`;
+    app().innerHTML = `<section class="view"><a href="/tutor">← Peer mentor dashboard</a><div class="results-head"><h1 style="font-size:30px">Your answers</h1></div><div class="col" id="ma-list"><div class="boot">Loading…</div></div><div class="row" style="justify-content:center"><button class="btn" id="ma-more" hidden>Load more</button></div></section>`;
     let offset = 0; const PAGE = 20;
     async function load() {
       const { data, error } = await sb.rpc("my_answers", { p_limit: PAGE, p_offset: offset });
@@ -1111,7 +1111,7 @@
     else if (new Date(q.expires_at) <= now) action = `<div class="muted" style="font-size:13px">This question has closed.</div>`;
     else if (claimed) action = `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">Held for you · ${clock(new Date(q.my_claim_expires) - now)} left</span><a class="btn primary sm" href="/answer/${q.id}">Continue answering</a></div>`;
     else if (full) action = `<div class="muted" style="font-size:13px">All ${q.slots} spots have been answered.</div>`;
-    else if (spots <= 0) action = `<div class="muted" style="font-size:13px">All remaining spots are held by other tutors. Check back in a few minutes.</div>`;
+    else if (spots <= 0) action = `<div class="muted" style="font-size:13px">All remaining spots are held by other peer mentors. Check back in a few minutes.</div>`;
     else action = `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">${holding ? `Finish or release your <span class="mono">${esc(holding.course_code)}</span> question to claim this one` : `${spots} of ${q.slots} spot${q.slots > 1 ? "s" : ""} left`}</span><button class="btn primary sm" data-claim="${q.id}" ${holding ? "disabled" : ""}>Claim · 2 min to answer</button></div>`;
     return `<article class="q tq${answered || full ? " done" : ""}" data-trg>
       <div class="tq-head"><div class="avatar sm" aria-hidden="true">${esc(initials(q.asker_name))}</div>
@@ -1125,7 +1125,7 @@
     </article>`;
   }
 
-  /* ---------------- answer editor (tutor) ---------------- */
+  /* ---------------- answer editor (peer mentor) ---------------- */
   const drafts = {};
   async function pageAnswer(id) {
     const home = S.profile.tutor_status === "approved" && !S.profile.tutor_paused ? "/tutor" : "/admin";
@@ -1248,7 +1248,7 @@
         <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><button class="btn ghost" id="rv-drop">Don't post</button>
           <span class="row" style="gap:8px">${timeUp ? "" : '<button class="btn" id="rv-edit">Keep editing</button>'}<button class="btn primary" id="rv-post" ${tooShort || tooLong ? "disabled" : ""}>Post answer</button></span></div>`, m => {
         const edit = $("#rv-edit", m); if (edit) edit.onclick = () => { reviewing = false; closeModal(); };
-        $("#rv-drop", m).onclick = async () => { await sb.rpc("release_claim", { q_id: id }); delete drafts[id]; closeModal(); toast("Not posted. The question has been released for other tutors."); go(home); };
+        $("#rv-drop", m).onclick = async () => { await sb.rpc("release_claim", { q_id: id }); delete drafts[id]; closeModal(); toast("Not posted. The question has been released for other peer mentors."); go(home); };
         $("#rv-post", m).onclick = () => post(m);
       });
       paintClaim();
@@ -1273,20 +1273,20 @@
     };
   }
 
-  /* ---------------- tutor application ---------------- */
+  /* ---------------- peer mentor application ---------------- */
   async function pageTutorApply() {
     const p = S.profile;
     const A = { step: 1, courses: [], file: null, path: null, myequals: "", agree: [false, false, false] };
     app().innerHTML = `<div class="medium"><div class="col">
-      <div><span class="eyebrow">Tutor application</span><h1 style="font-size:30px;margin-top:4px">Become a Distinction tutor</h1></div>
+      <div><span class="eyebrow">Peer mentor application</span><h1 style="font-size:30px;margin-top:4px">Become a Distinction peer mentor</h1></div>
       <div class="steps" id="steps"></div><div class="panel" id="body"></div></div></div>`;
-    const STEPS = ["Tutor profile", "Transcript", FEATURES.equals ? "Verification" : "Agreement", "Submit"];
+    const STEPS = ["Peer mentor profile", "Transcript", FEATURES.equals ? "Verification" : "Agreement", "Submit"];
     const paintSteps = () => $("#steps").innerHTML = STEPS.map((s, i) => `<span class="${i + 1 === A.step ? "on" : i + 1 < A.step ? "done" : ""}">${i + 1}. ${s}</span>`).join("");
     let readProfile = null;
 
     async function step1() {
       const pr = S.profile;
-      $("#body").innerHTML = `<h2>Your tutor profile</h2>
+      $("#body").innerHTML = `<h2>Your peer mentor profile</h2>
         <p class="muted" style="font-size:14px">Students see your display name, uni, degree and this intro. You can change your details anytime in <a href="/profile">Profile and settings</a>.</p>
         <dl class="kv"><dt>Display name</dt><dd>${esc(pr.display_name || "")}</dd><dt>University</dt><dd>${esc(uniName(pr.uni_id))}</dd><dt>Degree</dt><dd>${esc(pr.degree || "")}</dd></dl>
         <div id="fields" class="col"></div><div id="st" hidden></div><div class="row" style="justify-content:flex-end"><button class="btn primary" id="next">Continue</button></div>`;
@@ -1334,16 +1334,16 @@
         busy = false; $("#next").disabled = false;
         const n = A.courses.filter(c => c.mark >= 75).length;
         A.duplicate = !!(A.scanResult && A.scanResult.duplicate);
-        if (A.duplicate) status($("#st"), "This transcript is already registered to another Distinction account, so it can't be used again. Each tutor must use their own transcript.", "err");
+        if (A.duplicate) status($("#st"), "This transcript is already registered to another Distinction account, so it can't be used again. Each peer mentor must use their own transcript.", "err");
         else if (!A.courses.length) status($("#st"), "The AI couldn't find any courses with marks in that file. Try a clearer PDF or a full-page screenshot of your transcript. Your file has already been deleted.", "err");
-        else if (!n) status($("#st"), `The AI found ${A.courses.length} courses, but none has a mark of 75 or more yet, so there's nothing to tutor. Your file has been deleted.`, "err");
-        else status($("#st"), `Done. Your file has been deleted. The AI found ${A.courses.length} courses, and ${n} ${n === 1 ? "has" : "have"} a mark of 75 or more, so you can tutor ${n === 1 ? "it" : "them"}.`, "ok");
+        else if (!n) status($("#st"), `The AI found ${A.courses.length} courses, but none has a mark of 75 or more yet, so there's nothing to mentor. Your file has been deleted.`, "err");
+        else status($("#st"), `Done. Your file has been deleted. The AI found ${A.courses.length} courses, and ${n} ${n === 1 ? "has" : "have"} a mark of 75 or more, so you can mentor ${n === 1 ? "it" : "them"}.`, "ok");
         table();
       }
       function table() {
         if (!A.courses.length) { $("#tbl").innerHTML = ""; return; }
         $("#tbl").innerHTML = `<p style="font-size:14px;margin:0"><b>What the AI read from your transcript</b></p><div class="table-wrap"><table><thead><tr><th>Code</th><th>Course</th><th>Mark</th><th>Grade</th><th></th></tr></thead><tbody>
-          ${A.courses.map(c => `<tr class="${c.mark >= 75 ? "" : "ineligible"}"><td class="mono">${esc(c.code)}</td><td>${esc(c.title)}</td><td class="num">${c.mark}</td><td><span class="badge ${gcls(c.grade || gradeFor(c.mark))}">${esc(c.grade || gradeFor(c.mark))}</span></td><td>${c.mark >= 75 ? '<span class="elig yes">Can tutor</span>' : '<span class="elig">Below 75</span>'}</td></tr>`).join("")}
+          ${A.courses.map(c => `<tr class="${c.mark >= 75 ? "" : "ineligible"}"><td class="mono">${esc(c.code)}</td><td>${esc(c.title)}</td><td class="num">${c.mark}</td><td><span class="badge ${gcls(c.grade || gradeFor(c.mark))}">${esc(c.grade || gradeFor(c.mark))}</span></td><td>${c.mark >= 75 ? '<span class="elig yes">Can mentor</span>' : '<span class="elig">Below 75</span>'}</td></tr>`).join("")}
           </tbody></table></div>
           <p class="muted" style="font-size:13px">Something missing or wrong? Upload a clearer copy and the AI will read it again.</p>`;
       }
@@ -1353,14 +1353,14 @@
         if (busy) return;
         if (!A.path) return status($("#st"), "Upload your transcript first.", "err");
         if (A.duplicate) return status($("#st"), "This transcript is already registered to another account, so it can't be used again.", "err");
-        if (!A.courses.some(c => c.mark >= 75)) return status($("#st"), "You need at least one course with a mark of 75 or more to tutor. Upload a different transcript if this one's wrong.", "err");
+        if (!A.courses.some(c => c.mark >= 75)) return status($("#st"), "You need at least one course with a mark of 75 or more to mentor. Upload a different transcript if this one's wrong.", "err");
         A.step = 3; render();
       };
     }
     function step3() {
       const rules = ["I'll explain concepts in my own words and won't complete assessable work for students.", "I won't share past assignments, exam answers or files. I'll only answer with text and markup on the student's document.", "The transcript I uploaded is my own, official and unedited. Using someone else's transcript gets my account removed."];
       $("#body").innerHTML = `${FEATURES.equals ? `<h2>Verification</h2>
-        <p class="muted" style="font-size:14px">Add a My eQuals link to get a <b>✓ My eQuals</b> checkmark on your profile. My eQuals is the official digital transcript service used by Australian universities. It's optional: you can skip it now and add it later from your tutor profile.</p>
+        <p class="muted" style="font-size:14px">Add a My eQuals link to get a <b>✓ My eQuals</b> checkmark on your profile. My eQuals is the official digital transcript service used by Australian universities. It's optional: you can skip it now and add it later from your peer mentor profile.</p>
         <div class="panel" style="background:var(--surface-2);gap:10px;padding:16px">
           <b style="font-family:var(--display);font-size:17px">How to get your My eQuals link</b>
           <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14px">
@@ -1369,9 +1369,9 @@
             <li><b>Open your academic transcript and choose Share.</b> Pick <b>Public link</b> (without a PIN) and set the expiry to at least 30 days, so our reviewer can open it.</li>
             <li><b>Copy the link</b> and paste it below.</li>
           </ol>
-          <small class="muted">Waiting on your My eQuals transcript? Skip this for now and add the link later from your tutor profile.</small>
+          <small class="muted">Waiting on your My eQuals transcript? Skip this for now and add the link later from your peer mentor profile.</small>
         </div>
-        <label class="field"><span>My eQuals share link (optional)</span><input type="url" id="eq" value="${esc(A.myequals)}" placeholder="https://www.myequals.edu.au/…"></label>` : `<h2>Tutor agreement</h2><p class="muted" style="font-size:14px">Tick each box to confirm you'll tutor fairly.</p><input type="hidden" id="eq" value="">`}
+        <label class="field"><span>My eQuals share link (optional)</span><input type="url" id="eq" value="${esc(A.myequals)}" placeholder="https://www.myequals.edu.au/…"></label>` : `<h2>Peer mentor agreement</h2><p class="muted" style="font-size:14px">Tick each box to confirm you'll mentor fairly.</p><input type="hidden" id="eq" value="">`}
         <div class="agree">${rules.map((r, i) => `<label class="check"><input type="checkbox" data-ag="${i}" ${A.agree[i] ? "checked" : ""}><span>${r}</span></label>`).join("")}</div>
         <div id="st" hidden></div>
         <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="next">Continue</button></div>`;
@@ -1388,9 +1388,9 @@
       const good = A.courses.filter(c => c.mark >= 75);
       $("#body").innerHTML = `<h2>Review and submit</h2>
         <dl class="kv"><dt>Name</dt><dd>${esc(S.profile.full_name || "")} (${esc(S.profile.display_name || "")})</dd><dt>University</dt><dd>${esc(uniName(S.profile.uni_id))}</dd><dt>Degree</dt><dd>${esc(S.profile.degree || "")}</dd><dt>Transcript</dt><dd>Read by AI, then deleted</dd>${FEATURES.equals ? `<dt>My eQuals</dt><dd>${A.myequals ? "Link provided" : "Not yet. You can add it later for the checkmark."}</dd>` : ""}</dl>
-        ${good.length ? `<p style="font-size:14px"><b>You'll be approved to tutor these ${good.length} course${good.length === 1 ? "" : "s"} straight away</b></p><ul class="courses">${good.map(c => `<li><span class="code">${esc(c.code)}</span><span class="ttl">${esc(c.title)}</span><span class="grade">${c.mark}<span class="badge ${gcls(c.grade || gradeFor(c.mark))}">${esc(c.grade || gradeFor(c.mark))}</span></span></li>`).join("")}</ul>` : `<div class="status err">No courses with a mark of 75 or more. Go back and upload your transcript.</div>`}
+        ${good.length ? `<p style="font-size:14px"><b>You'll be approved to mentor these ${good.length} course${good.length === 1 ? "" : "s"} straight away</b></p><ul class="courses">${good.map(c => `<li><span class="code">${esc(c.code)}</span><span class="ttl">${esc(c.title)}</span><span class="grade">${c.mark}<span class="badge ${gcls(c.grade || gradeFor(c.mark))}">${esc(c.grade || gradeFor(c.mark))}</span></span></li>`).join("")}</ul>` : `<div class="status err">No courses with a mark of 75 or more. Go back and upload your transcript.</div>`}
         <div id="st" hidden></div>
-        <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="go" ${good.length ? "" : "disabled"}>Submit and start tutoring</button></div>`;
+        <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="go" ${good.length ? "" : "disabled"}>Submit and start mentoring</button></div>`;
       $("#back").onclick = () => { A.step = 3; render(); };
       $("#go").onclick = async () => {
         $("#go").disabled = true; status($("#st"), "Submitting…", "", true);
@@ -1403,7 +1403,7 @@
       };
     }
     function render() { paintSteps(); ({ 1: step1, 2: step2, 3: step3, 4: step4 })[A.step](); window.scrollTo(0, 0); }
-    // Resume: reuse the most recent scanned transcript so tutors can come back once their My eQuals link arrives
+    // Resume: reuse the most recent scanned transcript so peer mentors can come back once their My eQuals link arrives
     const { data: last } = await sb.from("transcript_scans").select("path, courses, created_at").eq("user_id", S.user.id).order("created_at", { ascending: false }).limit(1);
     if (last && last[0] && Date.now() - new Date(last[0].created_at) < 60 * 864e5) {
       A.path = last[0].path; A.courses = (last[0].courses || []).sort((a, b) => b.mark - a.mark);
@@ -1554,7 +1554,7 @@
           <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniShort(q.uni_id))} · ${ago(q.created_at)} · <span data-notr>${esc(who)}</span></span></span><span class="q-exp${closed ? "" : " live"}">${left(q.expires_at)}</span></div>
           <p class="q-text">${esc(q.body)}</p>
           <div class="q-pay"><span class="slotbar">${Array.from({ length: q.slots }, (_, i) => `<i class="${i < n ? "on" : ""}"></i>`).join("")}</span><span>${n} of ${q.slots} answers</span>${q.urgent ? '<span class="tagchip">Urgent</span>' : ""}${q.reach_level ? '<span class="tagchip">Widened</span>' : ""}<span class="tagchip">Reach ${q.reach_count ?? "?"}</span><span class="tagchip">${money(Number(q.cost || 0))}</span>${q.attachment_name ? '<span class="tagchip">Attachment</span>' : ""}</div>
-          ${n ? `<div class="ans-preview">${(q.answers || []).sort((a, b) => a.position - b.position).map(a => `<div class="ap"><b data-notr>${esc(S.names[a.tutor_id] || "Tutor")}</b><span>${esc((a.bubbles || []).join(" ").slice(0, 140))}</span></div>`).join("")}</div>` : ""}
+          ${n ? `<div class="ans-preview">${(q.answers || []).sort((a, b) => a.position - b.position).map(a => `<div class="ap"><b data-notr>${esc(S.names[a.tutor_id] || "Peer mentor")}</b><span>${esc((a.bubbles || []).join(" ").slice(0, 140))}</span></div>`).join("")}</div>` : ""}
           <div class="row" style="justify-content:flex-end;gap:8px"><a class="btn ghost sm" href="/q/${q.id}">View</a>${canAnswer ? `<a class="btn primary sm" href="/answer/${q.id}">Answer · 2 min</a>` : ""}</div>
         </article>`;
       }).join("") : `<div class="empty">No questions match.</div>`;
@@ -1603,7 +1603,7 @@
     if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
     const pend = data.filter(r => r.status === "pending");
     body.innerHTML = `<p class="muted" style="font-size:14px">${pend.length ? `${pend.length} to pay · ${money(pend.reduce((a, r) => a + Number(r.amount), 0))} total. Pay each one by PayID from your banking app, check the name matches, then mark it paid.` : "Nothing to pay right now."}</p>` +
-      (data.length ? `<div class="col">${data.map(r => `<div class="answer-card"><div class="row" style="justify-content:space-between"><span><b>${esc(r.tutor ? r.tutor.full_name || r.tutor.display_name : "Tutor")}</b> <span class="muted">${esc(uniShort(r.tutor && r.tutor.uni_id))} · ${ago(r.created_at)}</span></span><span class="status-pill ${r.status === "paid" ? "approved" : r.status === "rejected" ? "rejected" : "pending"}">${r.status === "pending" ? "To pay" : r.status === "paid" ? "Paid" : "Rejected"}</span></div>
+      (data.length ? `<div class="col">${data.map(r => `<div class="answer-card"><div class="row" style="justify-content:space-between"><span><b>${esc(r.tutor ? r.tutor.full_name || r.tutor.display_name : "Peer mentor")}</b> <span class="muted">${esc(uniShort(r.tutor && r.tutor.uni_id))} · ${ago(r.created_at)}</span></span><span class="status-pill ${r.status === "paid" ? "approved" : r.status === "rejected" ? "rejected" : "pending"}">${r.status === "pending" ? "To pay" : r.status === "paid" ? "Paid" : "Rejected"}</span></div>
         <dl class="kv"><dt>Amount</dt><dd><b>${money(Number(r.amount))}</b></dd><dt>PayID</dt><dd>${esc(r.payid)}</dd><dt>Name</dt><dd>${esc(r.payid_name)}</dd><dt>Reference</dt><dd>Distinction ${esc(r.id.slice(0, 8))}</dd></dl>
         ${r.status === "pending" ? `<div class="row" style="justify-content:flex-end"><button class="btn sm" data-pay="${r.id}:0">Reject</button><button class="btn primary sm" data-pay="${r.id}:1">Mark as paid</button></div>` : ""}</div>`).join("")}</div>` : "");
     body.onclick = async e => {
@@ -1615,7 +1615,7 @@
         closeModal(); toast(paid === "1" ? "Marked as paid" : "Request rejected. The amount is back in their balance."); adminPayouts();
       };
       if (paid === "1") return openModal(`<h3>Mark as paid?</h3><p class="muted" style="font-size:14px">Only do this once the PayID transfer has gone through.</p><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="pm-go">Mark as paid</button></div>`, m => { $("#pm-go", m).onclick = () => go(null); });
-      openModal(`<h3>Reject this withdrawal?</h3><label class="field"><span>Reason (shown to the tutor)</span><textarea class="prose" id="pm-note" maxlength="300" style="min-height:70px" placeholder="For example: the PayID name didn't match"></textarea></label><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="pm-go">Reject</button></div>`, m => { $("#pm-go", m).onclick = () => go($("#pm-note", m).value.trim() || null); });
+      openModal(`<h3>Reject this withdrawal?</h3><label class="field"><span>Reason (shown to the peer mentor)</span><textarea class="prose" id="pm-note" maxlength="300" style="min-height:70px" placeholder="For example: the PayID name didn't match"></textarea></label><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="pm-go">Reject</button></div>`, m => { $("#pm-go", m).onclick = () => go($("#pm-note", m).value.trim() || null); });
     };
   }
 
@@ -1623,7 +1623,7 @@
     const body = $("#ad-body");
     const { data, error } = await sb.from("answer_checks").select("ai_score, typed_ratio, reason, created_at, answer:answers(bubbles, question_id), tutor:profiles!answer_checks_tutor_id_fkey(id, full_name, display_name, ai_flags, uni_id, tutor_paused)").eq("flagged", true).order("created_at", { ascending: false }).limit(50);
     if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
-    body.innerHTML = data.length ? `<div class="col">${data.map(c => `<div class="answer-card"><div class="row" style="justify-content:space-between"><span><b>${esc(c.tutor ? c.tutor.full_name || c.tutor.display_name : "Tutor")}</b> <span class="muted">${esc(uniShort(c.tutor && c.tutor.uni_id))} · ${c.tutor ? c.tutor.ai_flags : 0} flag${c.tutor && c.tutor.ai_flags === 1 ? "" : "s"} in total</span></span><span class="row" style="gap:6px">${c.tutor && c.tutor.tutor_paused ? `<span class="status-pill pending">Paused</span><button class="btn sm" data-unpause="${c.tutor.id}">Lift pause</button>` : ""}<span class="status-pill rejected">${c.ai_score}% AI</span></span></div>
+    body.innerHTML = data.length ? `<div class="col">${data.map(c => `<div class="answer-card"><div class="row" style="justify-content:space-between"><span><b>${esc(c.tutor ? c.tutor.full_name || c.tutor.display_name : "Peer mentor")}</b> <span class="muted">${esc(uniShort(c.tutor && c.tutor.uni_id))} · ${c.tutor ? c.tutor.ai_flags : 0} flag${c.tutor && c.tutor.ai_flags === 1 ? "" : "s"} in total</span></span><span class="row" style="gap:6px">${c.tutor && c.tutor.tutor_paused ? `<span class="status-pill pending">Paused</span><button class="btn sm" data-unpause="${c.tutor.id}">Lift pause</button>` : ""}<span class="status-pill rejected">${c.ai_score}% AI</span></span></div>
       <p class="muted" style="font-size:13px">${esc(c.reason || "")}${c.typed_ratio != null ? ` · ${Math.round(c.typed_ratio * 100)}% typed` : ""} · ${ago(c.created_at)}</p>
       <div class="bubbles">${((c.answer && c.answer.bubbles) || []).map(b => `<div class="bubble">${esc(b)}</div>`).join("")}</div></div>`).join("")}</div>` : `<div class="empty">No answers flagged for AI writing.</div>`;
     body.onclick = async e => {
