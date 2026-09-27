@@ -156,11 +156,11 @@
           <p class="muted" style="max-width:52ch;margin-top:12px">Pick your uni and course, ask a short question, and it goes to students who got a Distinction or High Distinction in that exact course, and in similar courses at other unis. Standard questions are usually answered within an hour. Urgent ones within 20 minutes.</p>
           <div class="cta-row"><a class="btn primary" href="#/signup">Sign up to ask</a><a class="btn" href="#/signup">Sign up to tutor</a><a class="btn ghost" href="#/login">Log in</a></div>
         </div>
-        <div class="q demo-q" aria-hidden="true">
+        <div class="q demo-q" role="figure" aria-label="Example question and answer">
           <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">INFS2608</span><span class="q-time">UNSW · 2 min ago</span></span><span class="q-exp live">Urgent</span></div>
-          <p class="q-text">When normalising to 3NF, how do I tell a transitive dependency apart from a normal one?</p>
-          <div class="ans"><div class="ans-head"><span class="ord">1st</span><b>Tom N.</b><span class="grade">92<span class="badge HD">HD</span></span><span class="eq">✓ My eQuals</span></div>
-          <div class="bubbles"><div class="bubble">Check whether a non-key column depends on another non-key column.</div><div class="bubble">If CourseTitle depends on CourseCode, split them into their own table.</div></div></div>
+          <div class="demo-tr"><p class="q-text" data-demo="0"></p></div>
+          <div class="ans"><div class="ans-head"><span class="ord">1st</span><b data-notr>Tom N.</b><span class="grade">92<span class="badge HD">HD</span></span><span class="eq">✓ My eQuals</span></div>
+          <div class="bubbles demo-tr"><div class="bubble" data-demo="1"></div><div class="bubble" data-demo="2"></div></div></div>
         </div>
       </div>
       <div class="two-up">
@@ -169,6 +169,30 @@
       </div>
       <div class="faq"><h2>Common questions</h2><details class="faq-item"><summary>How accurate and reliable are the answers?</summary><p>Every tutor got a Distinction (75+) or High Distinction (85+) in your course, or a very similar one, read straight from their transcript by our AI. You can choose HD only if you want the top scorers. Each answer shows the tutor's mark and rating, and you can get 2, 3 or 5 answers to compare. Tutors are students, so double-check anything important against your course materials.</p></details><details class="faq-item"><summary>Is it safe to hand in my transcript?</summary><p>Yes. Our AI only reads the course codes and marks. It's set up to ignore your name, student number, address and date of birth, and the file is deleted from our records as soon as it's read. Only your courses and marks are kept, and they're only shown next to your answers.</p></details><details class="faq-item"><summary>How fast will I get an answer?</summary><p>Tutors get 2 minutes to answer once they claim your question, so answers often arrive within minutes. Standard questions are usually answered within an hour. Tick Urgent and answers come within 20 minutes.</p></details><details class="faq-item"><summary>What does it cost, and what if nobody answers?</summary><p>Questions start at $3 for 2 answers. You only pay for answers you receive: when your question closes, any unanswered spots are refunded to your credits automatically. You can close a question early at any time.</p></details><details class="faq-item"><summary>Is this cheating?</summary><p>No. Distinction is for understanding: explaining a concept, spotting a mistake, or hearing how someone approached the course. Tutors won't write assessable work for you, and questions are capped at 50 words to keep them focused. Always follow your university's academic integrity rules.</p></details><details class="faq-item"><summary>How do you stop AI-written answers?</summary><p>Tutors have to type every answer themselves. Pasting is turned off, the question can't be copied, and they only get 2 minutes. Every answer is also checked for AI writing. Flagged answers are reviewed, and tutors with repeated flags are paused.</p></details><details class="faq-item"><summary>Who can become a tutor, and how do they get paid?</summary><p>Anyone with a D or HD in a course can tutor it. Upload your transcript and our AI approves you in about 20 seconds. Each answer takes about 2 to 3 minutes, so while you're answering that works out to roughly $22 to $51 an hour, with the top end from early bird bonuses. How much you make depends on how many questions come in for your courses, so turn on email alerts to catch them. Earnings are tracked from your first answer, and payouts to your bank account are being set up.</p></details><details class="faq-item"><summary>What is My eQuals?</summary><p>My eQuals is the official digital transcript service used by Australian and New Zealand universities. Your uni issues your transcript there, so it can't be edited. Tutors can share a My eQuals link on their profile, and once we've checked it they get a <b>✓ My eQuals</b> checkmark, so students know their marks are verified by the university itself. It's optional. You can get a link by ordering an official transcript from your uni (at UNSW it's $20 and takes up to 5 working days), then choosing Share in My eQuals.</p></details><details class="faq-item"><summary>Can I ask in another language?</summary><p>Yes. Choose your language in your profile and the whole site switches to it. Questions and answers written in other languages are translated for you automatically, with a Show original button.</p></details></div>
     </section>`;
+    paintDemo();
+  }
+
+  // Homepage example: a question only someone who did the course can answer. Pre-translated for Mandarin.
+  const DEMO = [
+    ["Assignment 1 caps the ERD at 8 entities, but my tutor said Specialisation should be its own entity. Did you keep it separate and still stay under 8? Did it cost you marks?",
+     "作业1要求 ERD 最多 8 个实体，但我的辅导老师说 Specialisation 应该单独做成一个实体。你当时是单独做的吗？还能控制在 8 个以内吗？有没有被扣分？"],
+    ["I kept it separate and merged Appointment and Treatment into one entity, so I landed on exactly 8.",
+     "我把它单独做了，然后把 Appointment 和 Treatment 合并成一个实体，刚好 8 个。"],
+    ["Just explain it in your assumptions. The markers cared way more about normalisation than the entity count. I got 18/20.",
+     "在 assumptions 里解释清楚就行。评分更看重规范化，而不是实体数量。我拿了 18/20。"]
+  ];
+  function paintDemo() {
+    const zh = window.I18N && I18N.lang === "Mandarin (Simplified Chinese)";
+    let showZh = zh;
+    const paint = () => {
+      $$("[data-demo]").forEach(el => { el.setAttribute("data-notr", ""); el.textContent = DEMO[+el.dataset.demo][showZh ? 1 : 0]; });
+      const slot = $(".demo-q .demo-tr"); if (!slot) return;
+      let b = $(".demo-q .tr-toggle");
+      if (!zh) { if (b) b.remove(); return; }
+      if (!b) { b = document.createElement("button"); b.type = "button"; b.className = "tr-toggle"; slot.append(b); b.onclick = () => { showZh = !showZh; paint(); }; }
+      b.innerHTML = `${TR_ICON}<span>${showZh ? "Translated from English · Show original" : "Show translation"}</span>`;
+    };
+    paint();
   }
 
   /* ---------------- auth ---------------- */
