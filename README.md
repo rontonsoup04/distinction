@@ -78,6 +78,7 @@ Run these in the Supabase SQL editor, in order (all safe to re-run):
 22. `supabase/migration_21_more_questions_and_char_limits.sql`: opt-in "show more questions" for tutors; questions up to 300 characters and answers up to 500
 23. `supabase/migration_22_attachment_access.sql`: tutors using "show more questions" can open those attachments
 24. `supabase/migration_23_free_first_question.sql`: every account gets one free question ($3 off), given back if nobody answers
+25. `supabase/migration_24_admins_answer.sql`: admins can answer any open question
 
 Add test credits to an account (until payments launch):
 

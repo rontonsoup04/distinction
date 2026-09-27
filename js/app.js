@@ -1129,16 +1129,17 @@
   /* ---------------- answer editor (tutor) ---------------- */
   const drafts = {};
   async function pageAnswer(id) {
+    const home = S.profile.tutor_status === "approved" && !S.profile.tutor_paused ? "/tutor" : "/admin";
     app().innerHTML = `<div class="boot">Loading question…</div>`;
     const { data, error } = await sb.rpc("tutor_feed", { p_more: true }); if (error) throw error;
     const q = data.find(x => x.id === id);
-    if (!q) { app().innerHTML = `<div class="empty">This question isn't available to you. <a href="/tutor">Back to questions</a></div>`; return; }
-    if (q.my_position != null) { toast("You've already answered this question"); go("/tutor"); return; }
+    if (!q) { app().innerHTML = `<div class="empty">This question isn't available to you. <a href="${home}">Back to questions</a></div>`; return; }
+    if (q.my_position != null) { toast("You've already answered this question"); go(home); return; }
     let claimUntil = q.my_claim_expires ? new Date(q.my_claim_expires) : null;
     const d = drafts[id] || (drafts[id] = { bubbles: [""], ann: null });
     const eb = () => q.urgent && new Date(q.created_at).getTime() + URGENT_MIN * 60e3 > Date.now();
     app().innerHTML = `<section class="view">
-      <a href="/tutor">← Pending questions</a>
+      <a href="${home}">← ${home === "/admin" ? "Admin" : "Pending questions"}</a>
       <div class="${q.attachment_path ? "answer-layout" : "medium"}">
         ${q.attachment_path ? `<div class="doc-wrap"><div class="doc-toolbar" role="toolbar" aria-label="Markup tools">
             <button class="tool" data-tool="pen" aria-pressed="true">Pen</button><button class="tool" data-tool="highlight" aria-pressed="false">Highlighter</button><button class="tool" data-tool="note" aria-pressed="false">Text note</button>
@@ -1218,7 +1219,7 @@
     }
 
     if (timeUp) lockEditor();
-    $("#release").onclick = async () => { await sb.rpc("release_claim", { q_id: id }); delete drafts[id]; toast("Question released"); go("/tutor"); };
+    $("#release").onclick = async () => { await sb.rpc("release_claim", { q_id: id }); delete drafts[id]; toast("Question released"); go(home); };
     // When time's up the answer can't be changed any more, only posted or dropped
     function lockEditor() {
       $$("#bubbles textarea").forEach(t => t.readOnly = true);
@@ -1248,7 +1249,7 @@
         <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><button class="btn ghost" id="rv-drop">Don't post</button>
           <span class="row" style="gap:8px">${timeUp ? "" : '<button class="btn" id="rv-edit">Keep editing</button>'}<button class="btn primary" id="rv-post" ${tooShort || tooLong ? "disabled" : ""}>Post answer</button></span></div>`, m => {
         const edit = $("#rv-edit", m); if (edit) edit.onclick = () => { reviewing = false; closeModal(); };
-        $("#rv-drop", m).onclick = async () => { await sb.rpc("release_claim", { q_id: id }); delete drafts[id]; closeModal(); toast("Not posted. The question has been released for other tutors."); go("/tutor"); };
+        $("#rv-drop", m).onclick = async () => { await sb.rpc("release_claim", { q_id: id }); delete drafts[id]; closeModal(); toast("Not posted. The question has been released for other tutors."); go(home); };
         $("#rv-post", m).onclick = () => post(m);
       });
       paintClaim();
@@ -1269,7 +1270,7 @@
       if (r && r.id) sb.functions.invoke("check-answer", { body: { answer_id: r.id, typed, total } }).then(({ data }) => {
         if (data && data.flagged) aiWarning(data.ai_score);
       }).catch(() => { });
-      go("/tutor");
+      go(home);
     };
   }
 
@@ -1530,7 +1531,7 @@
       <div class="qgrid" id="aq-list"><div class="boot">Loading…</div></div>`;
     let rows = [];
     async function load() {
-      const { data, error } = await sb.from("questions").select("id, uni_id, course_code, body, slots, urgent, min_mark, goals, reach_level, reach_count, expires_at, created_at, cost, attachment_name, asker:profiles!questions_asker_id_fkey(full_name, display_name), answers(id, position, bubbles, tutor_id)").order("created_at", { ascending: false }).limit(300);
+      const { data, error } = await sb.from("questions").select("id, asker_id, uni_id, course_code, body, slots, urgent, min_mark, goals, reach_level, reach_count, expires_at, created_at, cost, attachment_name, asker:profiles!questions_asker_id_fkey(full_name, display_name), answers(id, position, bubbles, tutor_id)").order("created_at", { ascending: false }).limit(300);
       if (error) { $("#aq-list").innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
       rows = data || [];
       const ids = [...new Set(rows.flatMap(q => (q.answers || []).map(a => a.tutor_id)))];
@@ -1549,12 +1550,14 @@
       $("#aq-sum").textContent = `${rows.length} questions loaded · ${open} open · ${unanswered} open with no answers yet`;
       $("#aq-list").innerHTML = list.length ? list.map(q => {
         const n = (q.answers || []).length, closed = new Date(q.expires_at) < now, who = q.asker ? (q.asker.full_name || q.asker.display_name) : "Student";
-        return `<a class="q-link" href="/q/${q.id}"><article class="q${closed ? " closed" : ""}">
+        const canAnswer = !closed && n < q.slots && q.asker_id !== S.user.id && !(q.answers || []).some(a => a.tutor_id === S.user.id);
+        return `<article class="q${closed ? " closed" : ""}">
           <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniShort(q.uni_id))} · ${ago(q.created_at)} · <span data-notr>${esc(who)}</span></span></span><span class="q-exp${closed ? "" : " live"}">${left(q.expires_at)}</span></div>
           <p class="q-text">${esc(q.body)}</p>
           <div class="q-pay"><span class="slotbar">${Array.from({ length: q.slots }, (_, i) => `<i class="${i < n ? "on" : ""}"></i>`).join("")}</span><span>${n} of ${q.slots} answers</span>${q.urgent ? '<span class="tagchip">Urgent</span>' : ""}${q.reach_level ? '<span class="tagchip">Widened</span>' : ""}<span class="tagchip">Reach ${q.reach_count ?? "?"}</span><span class="tagchip">${money(Number(q.cost || 0))}</span>${q.attachment_name ? '<span class="tagchip">Attachment</span>' : ""}</div>
           ${n ? `<div class="ans-preview">${(q.answers || []).sort((a, b) => a.position - b.position).map(a => `<div class="ap"><b data-notr>${esc(S.names[a.tutor_id] || "Tutor")}</b><span>${esc((a.bubbles || []).join(" ").slice(0, 140))}</span></div>`).join("")}</div>` : ""}
-        </article></a>`;
+          <div class="row" style="justify-content:flex-end;gap:8px"><a class="btn ghost sm" href="/q/${q.id}">View</a>${canAnswer ? `<a class="btn primary sm" href="/answer/${q.id}">Answer · 2 min</a>` : ""}</div>
+        </article>`;
       }).join("") : `<div class="empty">No questions match.</div>`;
     }
     body.querySelectorAll('input[name="aq"]').forEach(r => r.onchange = paint);
