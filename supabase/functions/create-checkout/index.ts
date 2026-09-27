@@ -39,8 +39,11 @@ Deno.serve(async (req) => {
   if (!p) return json({ error: "Choose one of the credit packs" }, 400);
 
   const stripe = new Stripe(key, { apiVersion: "2024-06-20", httpClient: Stripe.createFetchHttpClient() });
-  const session = await stripe.checkout.sessions.create({
+  let session;
+  try {
+  session = await stripe.checkout.sessions.create({
     mode: "payment",
+    payment_method_types: ["card"],
     line_items: [{ quantity: 1, price_data: { currency: "aud", unit_amount: p.price * 100, product_data: { name: p.name } } }],
     customer_email: user.email ?? undefined,
     client_reference_id: user.id,
@@ -49,5 +52,11 @@ Deno.serve(async (req) => {
     success_url: `${SITE}/#/credits/paid`,
     cancel_url: `${SITE}/#/credits/cancelled`,
   });
+  } catch (e) {
+    console.error("Stripe", e);
+    const msg = (e as { message?: string })?.message ?? "";
+    // Admins see Stripe's own reason; everyone else gets a friendly message
+    return json({ error: me?.is_admin ? `Stripe: ${msg}` : "Card payments aren't available right now. Please try again later." }, 502);
+  }
   return json({ url: session.url, test: test || key.startsWith("sk_test_") });
 });
