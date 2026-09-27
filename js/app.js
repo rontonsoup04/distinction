@@ -70,12 +70,12 @@
   /* ---------------- shell ---------------- */
   function renderHeader() {
     const p = S.profile, signedIn = !!S.user;
-    const route = location.hash.split("/")[1] || "";
+    const here = location.hash.split("/")[1] || "";
     const links = signedIn && p && p.onboarded ? [
       ["ask", "Ask a question"], ["questions", "My questions"], ["tutor", p.tutor_status === "approved" ? "Tutor" : "Become a tutor"], ["credits", "Credits"],
       ...(p.is_admin ? [["admin", "Admin"]] : [])
     ] : [];
-    $("#nav").innerHTML = links.map(([r, l]) => `<a href="#/${r}" class="navlink" ${route === r || (r === "tutor" && route === "answer") ? 'aria-current="page"' : ""}>${l}</a>`).join("");
+    $("#nav").innerHTML = links.map(([r, l]) => `<a href="#/${r}" class="navlink" ${here === r || (r === "tutor" && here === "answer") ? 'aria-current="page"' : ""}>${l}</a>`).join("");
     const ZH = "Mandarin (Simplified Chinese)", cur = window.I18N ? I18N.lang : "English";
     const langBtn = `<button class="lang-btn" id="lang-btn" data-notr title="${cur === ZH ? "Switch to English" : "切换到中文"}" aria-label="${cur === ZH ? "Switch to English" : "Switch to Mandarin"}"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 8h13M8 1.5c2 2.2 2 10.8 0 13M8 1.5c-2 2.2-2 10.8 0 13" fill="none" stroke="currentColor" stroke-width="1.3"/></svg><span class="${cur === "English" ? "on" : ""}">EN</span><span class="sep">/</span><span class="${cur === ZH ? "on" : ""}">中文</span></button>`;
     $("#auth-area").innerHTML = langBtn + (signedIn
