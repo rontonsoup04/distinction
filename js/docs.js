@@ -91,7 +91,8 @@
           d.contentEditable = "true"; d.spellcheck = true;
           d.addEventListener("pointerdown", e => e.stopPropagation());
           d.addEventListener("input", () => { if (d.textContent.length > NOTE_MAX) { d.textContent = d.textContent.slice(0, NOTE_MAX); placeCaretEnd(d); } note.t = d.textContent; opts.onChange && opts.onChange(); });
-          d.addEventListener("paste", e => { e.preventDefault(); const t = (e.clipboardData.getData("text/plain") || "").slice(0, 120); document.execCommand("insertText", false, t); if ((e.clipboardData.getData("text/plain") || "").length > 120) UI.toast("Pasting is limited to short snippets. Type your explanation instead."); });
+          d.addEventListener("paste", e => { e.preventDefault(); UI.toast("Pasting is turned off. Type your notes yourself."); });
+          d.addEventListener("beforeinput", e => { if (/^insertFrom/.test(e.inputType || "")) e.preventDefault(); });
           d.addEventListener("drop", e => e.preventDefault());
           d.addEventListener("blur", () => { if (!d.textContent.trim()) { pa.notes.splice(pa.notes.indexOf(note), 1); renderNotes(p); opts.onChange && opts.onChange(); } });
           const del = document.createElement("button"); del.className = "del"; del.type = "button"; del.textContent = "×"; del.setAttribute("aria-label", "Delete note"); del.contentEditable = "false";

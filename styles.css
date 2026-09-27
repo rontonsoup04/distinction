@@ -565,3 +565,5 @@ fieldset.goals legend small{font-weight:400;margin-left:4px}
 .claim-clock{font-family:var(--mono);font-size:13px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--surface-2);color:var(--ink)}
 .claim-clock.low{background:color-mix(in srgb,#d9534f 18%,var(--surface));color:#b3261e}
 .claim-clock.over{font-family:var(--body);font-weight:500;color:var(--muted)}
+.nocopy,.nocopy *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.ai-banner{display:flex;align-items:center;justify-content:space-between;gap:12px}

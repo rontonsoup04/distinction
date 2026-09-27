@@ -771,6 +771,14 @@
       <a class="btn" href="#/tutor">Go to tutor profile</a></div></div>`;
   }
 
+  /* Warning shown when an answer looks AI-written */
+  function aiWarning(score) {
+    openModal(`<h3>⚠ This answer looked AI-written</h3>
+      <p style="font-size:14px">Our check rated your last answer <b>${score}% likely to be AI-generated</b>. Answers on Distinction must be your own words, typed by you.</p>
+      <p class="muted" style="font-size:14px">The answer was still sent and paid, but it's been flagged for review. Repeated flags can pause or remove your tutor account.</p>
+      <div class="row" style="justify-content:flex-end"><button class="btn primary" data-close id="ai-ok">I understand</button></div>`, m => { $("#ai-ok", m).addEventListener("click", () => sb.rpc("dismiss_ai_warnings")); });
+  }
+
   /* Ask tutors (once) whether they want emails about new questions */
   function askAlerts() {
     openModal(`<h3>Get an email when a question comes in?</h3>
@@ -850,11 +858,17 @@
           <div class="earn-rules"><span><b>$1.10</b> per answer</span><span class="ebr"><b>$1.70</b> early bird, on marked questions answered within 20 min</span><span>Payouts start when payments launch. Your earnings are tracked from today.</span></div></div>
         <div class="pitch"><div class="pitch-main"><span class="eyebrow">Your earning potential</span><div class="pitch-big"><b>$1–2</b> every 3 minutes</div><p>Questions are 50 words or less, and you get 2 minutes to answer once you claim one. Look for the early bird tag to earn $1.70. Turn on email alerts and answer from your phone between classes.</p><div class="pitch-now">This week: <b>${s.week_count || 0}</b> answer${s.week_count === 1 ? "" : "s"}</div></div>
           <div class="goals"><div class="goal"><div class="row" style="justify-content:space-between"><b>Weekly goal</b><span class="mono">${Math.min(20, s.week_count || 0)}/20</span></div><div class="meter"><i style="width:${Math.min(100, (s.week_count || 0) * 5)}%"></i></div><small>Answer 20 questions this week to hit your goal.</small></div></div></div>
+        <div id="ai-banner"></div>
         <div class="results-head"><h2>Pending questions</h2><span class="muted" style="font-size:13px">You can hold one question at a time</span></div>
         <div class="col" id="feed"><div class="boot" style="min-height:80px">Loading questions…</div></div>
       </div></div>`;
     $("#al-toggle").onchange = async e => { const on = e.target.checked; try { await saveProfile({ email_alerts: on, alerts_asked: true, email_alerts_at: on ? new Date().toISOString() : null }); toast(on ? "Email alerts are on" : "Email alerts are off"); } catch (err) { e.target.checked = !on; toast(errMsg(err)); } };
     if (!p.alerts_asked) setTimeout(askAlerts, 600);
+    sb.from("answer_checks").select("ai_score, created_at").eq("flagged", true).eq("seen", false).order("created_at", { ascending: false }).then(({ data }) => {
+      if (!data || !data.length || !$("#ai-banner")) return;
+      $("#ai-banner").innerHTML = `<div class="status err ai-banner"><span><b>${data.length === 1 ? "One of your answers" : data.length + " of your answers"} looked AI-written</b> (up to ${Math.max(...data.map(x => x.ai_score))}%). Answers must be your own words. Repeated flags can pause your tutor account.</span><button class="btn sm" id="ai-dismiss">Got it</button></div>`;
+      $("#ai-dismiss").onclick = async () => { await sb.rpc("dismiss_ai_warnings"); $("#ai-banner").innerHTML = ""; };
+    });
     const eqSave = $("#eq-save");
     if (eqSave) eqSave.onclick = async () => {
       const link = $("#eq-link").value.trim();
@@ -940,7 +954,7 @@
           </article>
           <div class="panel" style="gap:12px">
             <div class="row" style="justify-content:space-between"><h3 style="font-size:18px">Your answer</h3><span class="claim-clock" id="claim-state"></span></div>
-            <p class="muted" style="font-size:13px">You have <b>2 minutes</b> from claiming. Keep it short and in your own words: pasting is limited to short snippets and files can't be attached, so answers stay original.</p>
+            <p class="muted" style="font-size:13px">You have <b>2 minutes</b> from claiming. Type it yourself: pasting is turned off, the question can't be copied, and every answer is checked for AI writing.</p>
             <div class="composer-bubbles" id="bubbles"></div>
             <div class="row" style="justify-content:space-between"><button class="btn sm" id="add-b">+ Add another message</button><span class="counter" id="total"></span></div>
             <div id="st" hidden></div>
@@ -972,12 +986,18 @@
     }
     function updateTotal() { const t = d.bubbles.reduce((a, b) => a + b.length, 0); const el = $("#total"); el.textContent = `${t} / 2500 characters`; el.classList.toggle("over", t > 2500); }
     $("#bubbles").addEventListener("input", e => { const i = e.target.dataset.b; if (i != null) { d.bubbles[+i] = e.target.value; updateTotal(); } });
-    $("#bubbles").addEventListener("paste", e => {
-      const t = e.clipboardData.getData("text/plain") || "";
-      if (e.clipboardData.files && e.clipboardData.files.length) { e.preventDefault(); toast("Files can't be added to answers."); return; }
-      if (t.length > 120) { e.preventDefault(); toast("Pasting is limited to 120 characters. Type your explanation in your own words."); }
+    // Typing only: no pasting, dropping or inserting text any other way. Count what's actually typed.
+    d.typed = d.typed || 0;
+    $("#bubbles").addEventListener("beforeinput", e => {
+      const t = e.inputType || "";
+      if (/^insertFrom(Paste|Drop|Yank|PasteAsQuotation)$/.test(t)) { e.preventDefault(); toast("Pasting is turned off. Type your answer yourself."); return; }
+      if (/^insert(Text|CompositionText|ReplacementText)$/.test(t) && e.data) d.typed += e.data.length;
+      if (/^insert(LineBreak|Paragraph)$/.test(t)) d.typed += 1;
     });
-    $("#bubbles").addEventListener("drop", e => { e.preventDefault(); toast("Files can't be added to answers."); });
+    ["paste", "drop"].forEach(ev => $("#bubbles").addEventListener(ev, e => { e.preventDefault(); toast("Pasting is turned off. Type your answer yourself."); }));
+    // The question can't be copied either
+    const lock = el => { if (!el) return; el.classList.add("nocopy"); ["copy", "cut", "contextmenu", "selectstart", "dragstart"].forEach(ev => el.addEventListener(ev, e => { e.preventDefault(); if (ev === "copy" || ev === "cut") toast("Questions can't be copied."); })); };
+    lock(app().querySelector("article.q")); lock($("#doc"));
     $("#bubbles").addEventListener("click", e => { const r = e.target.closest("[data-rm]"); if (r) { d.bubbles.splice(+r.dataset.rm, 1); renderBubbles(); } });
     $("#add-b").onclick = () => { if (d.bubbles.length >= 10) return toast("Up to 10 messages per answer."); d.bubbles.push(""); renderBubbles(); $$("#bubbles textarea").pop().focus(); };
     renderBubbles();
@@ -1003,9 +1023,14 @@
       const { data: row, error } = await sb.rpc("submit_answer", { q_id: id, p_bubbles: bubbles, p_annotations: docApi ? docApi.annotations : {} });
       $("#submit").disabled = false;
       if (error) return status($("#st"), errMsg(error), "err");
-      delete drafts[id];
       const r = Array.isArray(row) ? row[0] : row;
-      toast(`Answer sent. ${money(Number(r && r.payout || PAY))} added to your earnings${r && r.urgent_rate ? " at the urgent rate" : ""}.`, 4500);
+      const typed = Math.min(d.typed || 0, total);
+      delete drafts[id];
+      toast(`Answer sent. ${money(Number(r && r.payout || PAY))} added to your earnings${r && r.urgent_rate ? " (early bird)" : ""}.`, 4500);
+      // AI-writing check runs in the background; a flagged answer gets a warning straight away
+      if (r && r.id) sb.functions.invoke("check-answer", { body: { answer_id: r.id, typed, total } }).then(({ data }) => {
+        if (data && data.flagged) aiWarning(data.ai_score);
+      }).catch(() => { });
       location.hash = "#/tutor";
     };
   }
@@ -1188,8 +1213,8 @@
   /* ---------------- admin ---------------- */
   async function pageAdmin() {
     if (!S.profile.is_admin) { app().innerHTML = `<div class="empty">Admins only.</div>`; return; }
-    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">Admin</h1><div class="seg" style="min-width:360px"><label><input type="radio" name="ad" value="apps" checked><span>Applications</span></label><label><input type="radio" name="ad" value="equals"><span>My eQuals</span></label><label><input type="radio" name="ad" value="reports"><span>Reports</span></label></div></div><div id="ad-body"></div></section>`;
-    document.querySelectorAll('input[name="ad"]').forEach(r => r.onchange = () => r.value === "apps" ? adminApps() : r.value === "equals" ? adminEquals() : adminReports());
+    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">Admin</h1><div class="seg" style="min-width:360px"><label><input type="radio" name="ad" value="apps" checked><span>Applications</span></label><label><input type="radio" name="ad" value="equals"><span>My eQuals</span></label><label><input type="radio" name="ad" value="reports"><span>Reports</span></label><label><input type="radio" name="ad" value="ai"><span>AI flags</span></label></div></div><div id="ad-body"></div></section>`;
+    document.querySelectorAll('input[name="ad"]').forEach(r => r.onchange = () => r.value === "apps" ? adminApps() : r.value === "equals" ? adminEquals() : r.value === "ai" ? adminAI() : adminReports());
     adminApps();
   }
   async function adminApps(selected) {
@@ -1253,6 +1278,15 @@
     const { data, error } = await sb.from("reports").select("*, answer:answers(bubbles, tutor_id, question_id, created_at)").order("created_at", { ascending: false }).limit(50);
     if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
     body.innerHTML = data.length ? `<div class="col">${data.map(r => `<div class="answer-card"><div class="row" style="justify-content:space-between"><b>Report</b><span class="muted" style="font-size:12px">${ago(r.created_at)}</span></div><p>${esc(r.reason || "")}</p><div class="bubbles">${((r.answer && r.answer.bubbles) || []).map(b => `<div class="bubble">${esc(b)}</div>`).join("")}</div></div>`).join("")}</div>` : `<div class="empty">No reports.</div>`;
+  }
+
+  async function adminAI() {
+    const body = $("#ad-body");
+    const { data, error } = await sb.from("answer_checks").select("ai_score, typed_ratio, reason, created_at, answer:answers(bubbles, question_id), tutor:profiles!answer_checks_tutor_id_fkey(full_name, display_name, ai_flags, uni_id)").eq("flagged", true).order("created_at", { ascending: false }).limit(50);
+    if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
+    body.innerHTML = data.length ? `<div class="col">${data.map(c => `<div class="answer-card"><div class="row" style="justify-content:space-between"><span><b>${esc(c.tutor ? c.tutor.full_name || c.tutor.display_name : "Tutor")}</b> <span class="muted">${esc(uniShort(c.tutor && c.tutor.uni_id))} · ${c.tutor ? c.tutor.ai_flags : 0} flag${c.tutor && c.tutor.ai_flags === 1 ? "" : "s"} in total</span></span><span class="status-pill rejected">${c.ai_score}% AI</span></div>
+      <p class="muted" style="font-size:13px">${esc(c.reason || "")}${c.typed_ratio != null ? ` · ${Math.round(c.typed_ratio * 100)}% typed` : ""} · ${ago(c.created_at)}</p>
+      <div class="bubbles">${((c.answer && c.answer.bubbles) || []).map(b => `<div class="bubble">${esc(b)}</div>`).join("")}</div></div>`).join("")}</div>` : `<div class="empty">No answers flagged for AI writing.</div>`;
   }
 
   /* ---------------- boot ---------------- */
