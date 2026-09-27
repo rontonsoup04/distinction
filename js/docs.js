@@ -1,7 +1,7 @@
 /* Distinction: PDF and image viewer with pen drawing and text notes.
    Tutors can only draw and add text notes on the student's own document. No file uploads. */
 (function () {
-  if (window.pdfjsLib) window.pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
+  if (window.pdfjsLib) window.pdfjsLib.GlobalWorkerOptions.workerSrc = "/vendor/pdf.worker.min.js";
   const MAX_PAGES = 12, RENDER_W = 1100, NOTE_MAX = 300;
   const COLORS = ["#D7263D", "#1B6FD1", "#118A4E", "#17212B"];
 
