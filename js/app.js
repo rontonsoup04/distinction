@@ -666,7 +666,7 @@
     if (!q) { app().innerHTML = `<div class="empty">This question doesn't exist or you don't have access to it.</div>`; return; }
     const mine = q.asker_id === S.user.id;
     app().innerHTML = `<section class="view">
-      <a href="/questions">← My questions</a>
+      ${mine ? '<a href="/questions">← My questions</a>' : '<a href="/admin">← Admin</a>'}
       <div class="answer-layout">
         <div class="col">
           <article class="q">
@@ -1448,9 +1448,9 @@
   /* ---------------- admin ---------------- */
   async function pageAdmin() {
     if (!S.profile.is_admin) { app().innerHTML = `<div class="empty">Admins only.</div>`; return; }
-    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">Admin</h1><div class="seg" style="min-width:360px"><label><input type="radio" name="ad" value="apps" checked><span>Applications</span></label>${FEATURES.equals ? '<label><input type="radio" name="ad" value="equals"><span>My eQuals</span></label>' : ""}<label><input type="radio" name="ad" value="reports"><span>Reports</span></label><label><input type="radio" name="ad" value="ai"><span>AI flags</span></label><label><input type="radio" name="ad" value="pay"><span>Payouts</span></label><label><input type="radio" name="ad" value="credits"><span>Credits</span></label></div></div><div id="ad-body"></div></section>`;
-    document.querySelectorAll('input[name="ad"]').forEach(r => r.onchange = () => r.value === "apps" ? adminApps() : r.value === "equals" ? adminEquals() : r.value === "ai" ? adminAI() : r.value === "pay" ? adminPayouts() : r.value === "credits" ? adminCredits() : adminReports());
-    adminApps();
+    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">Admin</h1><div class="seg" style="min-width:360px"><label><input type="radio" name="ad" value="qs" checked><span>Questions</span></label><label><input type="radio" name="ad" value="apps"><span>Applications</span></label>${FEATURES.equals ? '<label><input type="radio" name="ad" value="equals"><span>My eQuals</span></label>' : ""}<label><input type="radio" name="ad" value="reports"><span>Reports</span></label><label><input type="radio" name="ad" value="ai"><span>AI flags</span></label><label><input type="radio" name="ad" value="pay"><span>Payouts</span></label><label><input type="radio" name="ad" value="credits"><span>Credits</span></label></div></div><div id="ad-body"></div></section>`;
+    document.querySelectorAll('input[name="ad"]').forEach(r => r.onchange = () => r.value === "qs" ? adminQuestions() : r.value === "apps" ? adminApps() : r.value === "equals" ? adminEquals() : r.value === "ai" ? adminAI() : r.value === "pay" ? adminPayouts() : r.value === "credits" ? adminCredits() : adminReports());
+    adminQuestions();
   }
   async function adminApps(selected) {
     const body = $("#ad-body");
@@ -1513,6 +1513,51 @@
     const { data, error } = await sb.from("reports").select("*, answer:answers(bubbles, tutor_id, question_id, created_at)").order("created_at", { ascending: false }).limit(50);
     if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
     body.innerHTML = data.length ? `<div class="col">${data.map(r => `<div class="answer-card"><div class="row" style="justify-content:space-between"><b>Report</b><span class="muted" style="font-size:12px">${ago(r.created_at)}</span></div><p>${esc(r.reason || "")}</p><div class="bubbles">${((r.answer && r.answer.bubbles) || []).map(b => `<div class="bubble">${esc(b)}</div>`).join("")}</div></div>`).join("")}</div>` : `<div class="empty">No reports.</div>`;
+  }
+
+  /* Every question on the site */
+  async function adminQuestions() {
+    const body = $("#ad-body");
+    body.innerHTML = `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+        <div class="seg" style="min-width:260px"><label><input type="radio" name="aq" value="open" checked><span>Open</span></label><label><input type="radio" name="aq" value="all"><span>All</span></label><label><input type="radio" name="aq" value="none"><span>No answers yet</span></label></div>
+        <input type="search" id="aq-q" placeholder="Filter by course code or text" style="flex:1;min-width:180px">
+        ${refreshBtn("aq-ref")}</div>
+      <p class="muted" id="aq-sum" style="font-size:13px;margin:0"></p>
+      <div class="qgrid" id="aq-list"><div class="boot">Loading…</div></div>`;
+    let rows = [];
+    async function load() {
+      const { data, error } = await sb.from("questions").select("id, uni_id, course_code, body, slots, urgent, min_mark, goals, reach_level, reach_count, expires_at, created_at, cost, attachment_name, asker:profiles!questions_asker_id_fkey(full_name, display_name), answers(id, position, bubbles, tutor_id)").order("created_at", { ascending: false }).limit(300);
+      if (error) { $("#aq-list").innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
+      rows = data || [];
+      const ids = [...new Set(rows.flatMap(q => (q.answers || []).map(a => a.tutor_id)))];
+      if (ids.length) { const { data: ts } = await sb.from("profiles").select("id, display_name, full_name").in("id", ids); (ts || []).forEach(t => S.names[t.id] = displayName(t)); }
+      paint();
+    }
+    function paint() {
+      const mode = document.querySelector('input[name="aq"]:checked').value, f = $("#aq-q").value.trim().toUpperCase(), now = Date.now();
+      const list = rows.filter(q => {
+        const open = new Date(q.expires_at) > now, n = (q.answers || []).length;
+        if (mode === "open" && !open) return false;
+        if (mode === "none" && n > 0) return false;
+        return !f || (q.course_code + " " + q.body + " " + q.uni_id).toUpperCase().includes(f);
+      });
+      const open = rows.filter(q => new Date(q.expires_at) > now).length, unanswered = rows.filter(q => !(q.answers || []).length && new Date(q.expires_at) > now).length;
+      $("#aq-sum").textContent = `${rows.length} questions loaded · ${open} open · ${unanswered} open with no answers yet`;
+      $("#aq-list").innerHTML = list.length ? list.map(q => {
+        const n = (q.answers || []).length, closed = new Date(q.expires_at) < now, who = q.asker ? (q.asker.full_name || q.asker.display_name) : "Student";
+        return `<a class="q-link" href="/q/${q.id}"><article class="q${closed ? " closed" : ""}">
+          <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniShort(q.uni_id))} · ${ago(q.created_at)} · <span data-notr>${esc(who)}</span></span></span><span class="q-exp${closed ? "" : " live"}">${left(q.expires_at)}</span></div>
+          <p class="q-text">${esc(q.body)}</p>
+          <div class="q-pay"><span class="slotbar">${Array.from({ length: q.slots }, (_, i) => `<i class="${i < n ? "on" : ""}"></i>`).join("")}</span><span>${n} of ${q.slots} answers</span>${q.urgent ? '<span class="tagchip">Urgent</span>' : ""}${q.reach_level ? '<span class="tagchip">Widened</span>' : ""}<span class="tagchip">Reach ${q.reach_count ?? "?"}</span><span class="tagchip">${money(Number(q.cost || 0))}</span>${q.attachment_name ? '<span class="tagchip">Attachment</span>' : ""}</div>
+          ${n ? `<div class="ans-preview">${(q.answers || []).sort((a, b) => a.position - b.position).map(a => `<div class="ap"><b data-notr>${esc(S.names[a.tutor_id] || "Tutor")}</b><span>${esc((a.bubbles || []).join(" ").slice(0, 140))}</span></div>`).join("")}</div>` : ""}
+        </article></a>`;
+      }).join("") : `<div class="empty">No questions match.</div>`;
+    }
+    body.querySelectorAll('input[name="aq"]').forEach(r => r.onchange = paint);
+    $("#aq-q").oninput = paint;
+    wireRefresh("aq-ref", load);
+    await load();
+    every(20000, load);
   }
 
   /* Give (or take back) credits on any account */
