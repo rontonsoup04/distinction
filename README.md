@@ -71,6 +71,7 @@ Run these in the Supabase SQL editor, in order (all safe to re-run):
 15. `supabase/migration_14_auto_approve.sql`: tutors are approved instantly from the AI scan; names aren't kept; the same transcript (identical courses and marks) can't be used by two accounts
 16. `supabase/migration_15_alerts_and_fast_claims.sql`: opt-in email alerts for tutors and a 2-minute answer window
 17. `supabase/migration_16_ai_checks.sql`: AI-writing checks on answers (flag over 40%, tutor warning, admin AI flags tab)
+18. `supabase/migration_17_ai_pause.sql`: tutoring pauses automatically after 3 AI flags in 30 days; admins can lift it
 
 Add test credits to an account (until payments launch):
 

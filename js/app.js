@@ -775,7 +775,7 @@
   function aiWarning(score) {
     openModal(`<h3>⚠ This answer looked AI-written</h3>
       <p style="font-size:14px">Our check rated your last answer <b>${score}% likely to be AI-generated</b>. Answers on Distinction must be your own words, typed by you.</p>
-      <p class="muted" style="font-size:14px">The answer was still sent and paid, but it's been flagged for review. Repeated flags can pause or remove your tutor account.</p>
+      <p class="muted" style="font-size:14px">The answer was still sent and paid, but it's been flagged. <b>3 flags within 30 days pauses your tutoring</b> until we review it.</p>
       <div class="row" style="justify-content:flex-end"><button class="btn primary" data-close id="ai-ok">I understand</button></div>`, m => { $("#ai-ok", m).addEventListener("click", () => sb.rpc("dismiss_ai_warnings")); });
   }
 
@@ -796,6 +796,7 @@
     if (!p.onboarded || p.tutor_status === "none") return tutorPitch();
     if (p.tutor_status === "pending") return tutorPending();
     if (p.tutor_status === "rejected") return tutorRejected();
+    if (p.tutor_paused) return tutorPaused();
     return tutorDashboard();
   }
   function tutorPitch() {
@@ -818,6 +819,13 @@
     app().innerHTML = `<div class="medium"><div class="panel pending-card"><span class="status-pill rejected">Not approved</span><h1 style="font-size:28px">Your application was rejected</h1>
       ${apps && apps[0] && apps[0].admin_notes ? `<p>${esc(apps[0].admin_notes)}</p>` : `<p class="muted">We couldn't match your courses to your transcript.</p>`}
       <a class="btn primary" href="#/tutor/apply">Apply again</a></div></div>`;
+  }
+
+  function tutorPaused() {
+    app().innerHTML = `<div class="medium"><div class="panel pending-card"><span class="status-pill rejected">Tutoring paused</span><h1 style="font-size:28px">Your tutoring is paused</h1>
+      <p>Three of your answers in the last 30 days were flagged as likely AI-written, so you can't see or claim questions for now. Answers on Distinction must be your own words, typed by you.</p>
+      <p class="muted">Think this is a mistake? Email <a href="mailto:support@hdistinction.live">support@hdistinction.live</a> and we'll review your answers. Your earnings so far are safe, and you can still ask questions.</p>
+      <a class="btn" href="#/ask">Ask a question</a></div></div>`;
   }
 
   async function tutorDashboard() {
@@ -866,7 +874,7 @@
     if (!p.alerts_asked) setTimeout(askAlerts, 600);
     sb.from("answer_checks").select("ai_score, created_at").eq("flagged", true).eq("seen", false).order("created_at", { ascending: false }).then(({ data }) => {
       if (!data || !data.length || !$("#ai-banner")) return;
-      $("#ai-banner").innerHTML = `<div class="status err ai-banner"><span><b>${data.length === 1 ? "One of your answers" : data.length + " of your answers"} looked AI-written</b> (up to ${Math.max(...data.map(x => x.ai_score))}%). Answers must be your own words. Repeated flags can pause your tutor account.</span><button class="btn sm" id="ai-dismiss">Got it</button></div>`;
+      $("#ai-banner").innerHTML = `<div class="status err ai-banner"><span><b>${data.length === 1 ? "One of your answers" : data.length + " of your answers"} looked AI-written</b> (up to ${Math.max(...data.map(x => x.ai_score))}%). Answers must be your own words. 3 flags within 30 days pauses your tutoring.</span><button class="btn sm" id="ai-dismiss">Got it</button></div>`;
       $("#ai-dismiss").onclick = async () => { await sb.rpc("dismiss_ai_warnings"); $("#ai-banner").innerHTML = ""; };
     });
     const eqSave = $("#eq-save");
@@ -1282,11 +1290,18 @@
 
   async function adminAI() {
     const body = $("#ad-body");
-    const { data, error } = await sb.from("answer_checks").select("ai_score, typed_ratio, reason, created_at, answer:answers(bubbles, question_id), tutor:profiles!answer_checks_tutor_id_fkey(full_name, display_name, ai_flags, uni_id)").eq("flagged", true).order("created_at", { ascending: false }).limit(50);
+    const { data, error } = await sb.from("answer_checks").select("ai_score, typed_ratio, reason, created_at, answer:answers(bubbles, question_id), tutor:profiles!answer_checks_tutor_id_fkey(id, full_name, display_name, ai_flags, uni_id, tutor_paused)").eq("flagged", true).order("created_at", { ascending: false }).limit(50);
     if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
-    body.innerHTML = data.length ? `<div class="col">${data.map(c => `<div class="answer-card"><div class="row" style="justify-content:space-between"><span><b>${esc(c.tutor ? c.tutor.full_name || c.tutor.display_name : "Tutor")}</b> <span class="muted">${esc(uniShort(c.tutor && c.tutor.uni_id))} · ${c.tutor ? c.tutor.ai_flags : 0} flag${c.tutor && c.tutor.ai_flags === 1 ? "" : "s"} in total</span></span><span class="status-pill rejected">${c.ai_score}% AI</span></div>
+    body.innerHTML = data.length ? `<div class="col">${data.map(c => `<div class="answer-card"><div class="row" style="justify-content:space-between"><span><b>${esc(c.tutor ? c.tutor.full_name || c.tutor.display_name : "Tutor")}</b> <span class="muted">${esc(uniShort(c.tutor && c.tutor.uni_id))} · ${c.tutor ? c.tutor.ai_flags : 0} flag${c.tutor && c.tutor.ai_flags === 1 ? "" : "s"} in total</span></span><span class="row" style="gap:6px">${c.tutor && c.tutor.tutor_paused ? `<span class="status-pill pending">Paused</span><button class="btn sm" data-unpause="${c.tutor.id}">Lift pause</button>` : ""}<span class="status-pill rejected">${c.ai_score}% AI</span></span></div>
       <p class="muted" style="font-size:13px">${esc(c.reason || "")}${c.typed_ratio != null ? ` · ${Math.round(c.typed_ratio * 100)}% typed` : ""} · ${ago(c.created_at)}</p>
       <div class="bubbles">${((c.answer && c.answer.bubbles) || []).map(b => `<div class="bubble">${esc(b)}</div>`).join("")}</div></div>`).join("")}</div>` : `<div class="empty">No answers flagged for AI writing.</div>`;
+    body.onclick = async e => {
+      const b = e.target.closest("[data-unpause]"); if (!b) return;
+      b.disabled = true;
+      const { error } = await sb.rpc("admin_unpause_tutor", { p_user: b.dataset.unpause });
+      if (error) { toast(errMsg(error)); b.disabled = false; return; }
+      toast("Pause lifted. Earlier flags no longer count."); adminAI();
+    };
   }
 
   /* ---------------- boot ---------------- */
