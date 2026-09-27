@@ -599,3 +599,5 @@ fieldset.goals legend small{font-weight:400;margin-left:4px}
 .my-answers-link:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
 .my-answers-link>span:last-child{color:var(--accent);font-weight:600}
 .review-line{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
+.more-toggle{border:1px dashed var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px;background:var(--surface)}
+.simchip.related{border-style:dotted;color:var(--muted)}

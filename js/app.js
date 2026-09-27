@@ -8,7 +8,7 @@
   // Features switched off until there are enough tutors
   const FEATURES = { hdOnly: false, equals: false };
   const REVIEW_MS = 60e3;  // the hold is 3 minutes on the server: 2 to write, then 1 to review and post
-  const WORD_LIMIT = 50, MAX_FILE = 5 * 1024 * 1024, CLAIM_MIN = 2, URGENT_MIN = 20, PAY = 1.10, URGENT_PAY = 1.70;
+  const Q_MAX = 300, Q_MIN = 20, A_MAX = 500, WORD_LIMIT = 50, MAX_FILE = 5 * 1024 * 1024, CLAIM_MIN = 2, URGENT_MIN = 20, PAY = 1.10, URGENT_PAY = 1.70;
   const FILE_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
   const YEARS = ["1st year", "2nd year", "3rd year", "4th year", "5th year or later", "Postgraduate"];
   const DURS = [{ value: "1", label: "1 hour" }, { value: "3", label: "3 hours" }, { value: "6", label: "6 hours" }, { value: "12", label: "12 hours" }, { value: "24", label: "1 day", sub: "Most answers" }];
@@ -174,10 +174,10 @@
         </div>
       </div>
       <div class="two-up">
-        <div class="panel feature"><span class="eyebrow">For students</span><h2>Answers from people who aced your course</h2><ul><li>Pick your uni and course from 40 Australian universities</li><li>50-word questions with one PDF or image</li><li>Every tutor with a D or HD in your course, or a similar one, can see and claim it</li><li>Get 2, 3 or 5 answers. Rate each one.</li></ul><a class="btn primary" href="#/signup" style="align-self:flex-start">Sign up as a student</a></div>
+        <div class="panel feature"><span class="eyebrow">For students</span><h2>Answers from people who aced your course</h2><ul><li>Pick your uni and course from 40 Australian universities</li><li>300-character questions with one PDF or image</li><li>Every tutor with a D or HD in your course, or a similar one, can see and claim it</li><li>Get 2, 3 or 5 answers. Rate each one.</li></ul><a class="btn primary" href="#/signup" style="align-self:flex-start">Sign up as a student</a></div>
         <div class="panel feature"><span class="eyebrow">For tutors</span><h2>Get paid to answer questions you already know</h2><ul><li>Upload your transcript. Our AI approves every course where you got a D or HD.</li><li>Claim a question and answer it in 2 minutes, with short messages and by drawing on the student's document.</li><li>Earn $1 to $2 for every 2-minute answer. That's roughly $33 to $51 an hour while you're answering.</li></ul><p class="muted" style="font-size:13px">Create a free account first, then apply to tutor from your account.</p><a class="btn" href="#/signup" style="align-self:flex-start">Create an account</a></div>
       </div>
-      <div class="faq"><h2>Common questions</h2><details class="faq-item"><summary>How accurate and reliable are the answers?</summary><p>Every tutor got a Distinction (75+) or High Distinction (85+) in your course, or a very similar one, read straight from their transcript by our AI. Each answer shows the tutor's mark and rating, and you can get 2, 3 or 5 answers to compare. Tutors are students, so double-check anything important against your course materials.</p></details><details class="faq-item"><summary>Is it safe to hand in my transcript?</summary><p>Yes. Our AI only reads the course codes and marks. It's set up to ignore your name, student number, address and date of birth, and the file is deleted from our records as soon as it's read. Only your courses and marks are kept, and they're only shown next to your answers.</p></details><details class="faq-item"><summary>How fast will I get an answer?</summary><p>Tutors get 2 minutes to answer once they claim your question, so answers often arrive within minutes. Standard questions are usually answered within an hour. Tick Urgent and answers come within 20 minutes.</p></details><details class="faq-item"><summary>What does it cost, and what if nobody answers?</summary><p>Questions start at $3 for 2 answers. You only pay for answers you receive: when your question closes, any unanswered spots are refunded to your credits automatically. You can close a question early at any time.</p></details><details class="faq-item"><summary>Is this cheating?</summary><p>No. Distinction is for understanding: explaining a concept, spotting a mistake, or hearing how someone approached the course. Tutors won't write assessable work for you, and questions are capped at 50 words to keep them focused. Always follow your university's academic integrity rules.</p></details><details class="faq-item"><summary>How do you stop AI-written answers?</summary><p>Tutors have to type every answer themselves. Pasting is turned off, the question can't be copied, and they only get 2 minutes. Every answer is also checked for AI writing. Flagged answers are reviewed, and tutors with repeated flags are paused.</p></details><details class="faq-item"><summary>Who can become a tutor, and how do they get paid?</summary><p>Anyone with a D or HD in a course can tutor it. Upload your transcript and our AI approves you in about 20 seconds. You get 2 minutes per answer and earn $1 to $2 each, so while you're answering that works out to roughly $33 to $51 an hour, with the top end from early bird questions. How much you make depends on how many questions come in for your courses, so turn on email alerts to catch them. Earnings are tracked from your first answer, and payouts to your bank account are being set up.</p></details><details class="faq-item"><summary>Can I ask in another language?</summary><p>Yes. Choose your language in your profile and the whole site switches to it. Questions and answers written in other languages are translated for you automatically, with a Show original button.</p></details></div>
+      <div class="faq"><h2>Common questions</h2><details class="faq-item"><summary>How accurate and reliable are the answers?</summary><p>Every tutor got a Distinction (75+) or High Distinction (85+) in your course, or a very similar one, read straight from their transcript by our AI. Each answer shows the tutor's mark and rating, and you can get 2, 3 or 5 answers to compare. Tutors are students, so double-check anything important against your course materials.</p></details><details class="faq-item"><summary>Is it safe to hand in my transcript?</summary><p>Yes. Our AI only reads the course codes and marks. It's set up to ignore your name, student number, address and date of birth, and the file is deleted from our records as soon as it's read. Only your courses and marks are kept, and they're only shown next to your answers.</p></details><details class="faq-item"><summary>How fast will I get an answer?</summary><p>Tutors get 2 minutes to answer once they claim your question, so answers often arrive within minutes. Standard questions are usually answered within an hour. Tick Urgent and answers come within 20 minutes.</p></details><details class="faq-item"><summary>What does it cost, and what if nobody answers?</summary><p>Questions start at $3 for 2 answers. You only pay for answers you receive: when your question closes, any unanswered spots are refunded to your credits automatically. You can close a question early at any time.</p></details><details class="faq-item"><summary>Is this cheating?</summary><p>No. Distinction is for understanding: explaining a concept, spotting a mistake, or hearing how someone approached the course. Tutors won't write assessable work for you, and questions are capped at 300 characters to keep them focused. Always follow your university's academic integrity rules.</p></details><details class="faq-item"><summary>How do you stop AI-written answers?</summary><p>Tutors have to type every answer themselves. Pasting is turned off, the question can't be copied, and they only get 2 minutes. Every answer is also checked for AI writing. Flagged answers are reviewed, and tutors with repeated flags are paused.</p></details><details class="faq-item"><summary>Who can become a tutor, and how do they get paid?</summary><p>Anyone with a D or HD in a course can tutor it. Upload your transcript and our AI approves you in about 20 seconds. You get 2 minutes per answer and earn $1 to $2 each, so while you're answering that works out to roughly $33 to $51 an hour, with the top end from early bird questions. How much you make depends on how many questions come in for your courses, so turn on email alerts to catch them. Earnings are tracked from your first answer, and payouts to your bank account are being set up.</p></details><details class="faq-item"><summary>Can I ask in another language?</summary><p>Yes. Choose your language in your profile and the whole site switches to it. Questions and answers written in other languages are translated for you automatically, with a Show original button.</p></details></div>
     </section>`;
     paintDemo(); startRotor();
   }
@@ -453,7 +453,7 @@
           <p class="fast"><span class="pulse" aria-hidden="true"></span>Receive an answer in a couple of minutes</p>
           <p>Your question goes to every student who got a Distinction or High Distinction in that course, or a similar course at your uni or another. Standard questions are usually answered within an hour. Tick Urgent for answers within 20 minutes.</p>
           <div class="how" style="margin-top:22px">
-            <div><span class="stepno">1 · PICK</span><b>Uni and course</b><p>Choose your uni and course, write up to 50 words and attach one file.</p></div>
+            <div><span class="stepno">1 · PICK</span><b>Uni and course</b><p>Choose your uni and course, write up to 300 characters and attach one file.</p></div>
             <div><span class="stepno">2 · CHOOSE</span><b>Who answers</b><p>Everyone who got a D or HD in that course or a similar one.</p></div>
             <div><span class="stepno">3 · GET</span><b>Answers</b><p>Tutors reply in short messages and can mark up your PDF or image directly.</p></div>
           </div>
@@ -472,8 +472,8 @@
             <div class="goal-grid">${GOALS.map(g => `<label class="goal"><input type="checkbox" name="a-goal" value="${g.v}"><span><b>${g.label}</b><small>${g.hint}</small></span></label>`).join("")}</div>
           </fieldset>
           <div class="field">
-            <div class="row" style="justify-content:space-between"><label for="a-text" style="font-size:13px;font-weight:500">Your question</label><span class="words" id="a-words">0 / ${WORD_LIMIT} words</span></div>
-            <textarea class="prose" id="a-text" style="min-height:76px" placeholder="Keep it short: what you're stuck on and which week or assignment it's from."></textarea>
+            <div class="row" style="justify-content:space-between"><label for="a-text" style="font-size:13px;font-weight:500">Your question</label><span class="words" id="a-words">0 / ${Q_MAX} characters</span></div>
+            <textarea class="prose" id="a-text" maxlength="${Q_MAX}" style="min-height:76px" placeholder="Keep it short: what you're stuck on and which week or assignment it's from."></textarea>
             <div class="attach"><label class="linkbtn attach-btn" for="a-file" id="a-file-btn">+ Attach a file</label><input type="file" id="a-file" accept="${FILE_TYPES.join(",")}" hidden><span id="a-file-chip"></span><small class="muted">1 image or PDF, up to 5 MB</small></div>
           </div>
           <div class="field"><span>How many answers</span>
@@ -536,16 +536,16 @@
       $("#a-file-btn").hidden = !!attach;
       const rm = $("#a-file-rm"); if (rm) rm.onclick = () => { attach = null; renderAttach(); };
     }
-    $("#a-text").oninput = () => { const w = words($("#a-text").value); const el = $("#a-words"); el.textContent = `${w} / ${WORD_LIMIT} words`; el.classList.toggle("over", w > WORD_LIMIT); };
+    $("#a-text").oninput = () => { const n = $("#a-text").value.trim().length; const el = $("#a-words"); el.textContent = `${n} / ${Q_MAX} characters`; el.classList.toggle("over", n > Q_MAX); };
 
     $("#compose").onsubmit = async e => {
       e.preventDefault();
       const st = $("#a-status");
-      const code = courseSel.value, uni = uniSel2.value, text = $("#a-text").value.trim(), w = words(text);
+      const code = courseSel.value, uni = uniSel2.value, text = $("#a-text").value.trim(), n = text.length;
       if (!uni) return status(st, "Choose your university.", "err");
       if (!validCode(code)) return status(st, "Pick a course from the list, or type its code in the search box.", "err");
-      if (w < 5) return status(st, "Write a bit more so tutors know what you're stuck on.", "err");
-      if (w > WORD_LIMIT) return status(st, `Your question is ${w} words. Cut it to ${WORD_LIMIT} or fewer.`, "err");
+      if (n < Q_MIN) return status(st, "Write a bit more so tutors know what you're stuck on.", "err");
+      if (n > Q_MAX) return status(st, `Your question is ${n} characters. Cut it to ${Q_MAX} or fewer.`, "err");
       const cost = priceFor(+document.querySelector('input[name="a-count"]:checked').value, $("#a-urgent").checked, isHD());
       if (cost > Number(p.credits || 0)) return status(st, `This question costs ${money(cost)} and you have ${money(Number(p.credits || 0))}. Top up on the Credits page or choose fewer answers.`, "err");
       const btn = $("#a-post"); btn.disabled = true; status(st, attach ? "Uploading your file…" : "Posting…", "", true);
@@ -957,13 +957,16 @@
         <div class="earn-strip"><div><div class="eyebrow" style="color:inherit;opacity:.7">Earned so far</div><div class="earn-amt">${money(Number(s.earned || 0))}</div></div>
           <div class="earn-rules"><span><b>$1–2</b> per answer</span><span class="ebr">Early bird questions pay the most</span></div>
           <div class="withdraw"><div><div class="eyebrow" style="color:inherit;opacity:.7">Available to withdraw</div><div class="earn-amt" id="avail">…</div><small id="w-note" style="opacity:.8"></small></div><button class="btn" id="w-btn" disabled>Withdraw</button></div></div>
-        <div class="pitch"><div class="pitch-main"><span class="eyebrow">Your earning potential</span><div class="pitch-big"><b>$1–2</b> every 2 minutes</div><p>Questions are 50 words or less, and you get 2 minutes to answer once you claim one. That's roughly $33 to $51 an hour while you're answering. Look for the early bird tag for the top rate, and turn on email alerts to answer from your phone between classes.</p><div class="pitch-now">This week: <b>${s.week_count || 0}</b> answer${s.week_count === 1 ? "" : "s"}</div></div>
+        <div class="pitch"><div class="pitch-main"><span class="eyebrow">Your earning potential</span><div class="pitch-big"><b>$1–2</b> every 2 minutes</div><p>Questions are 300 characters or less, and you get 2 minutes to answer once you claim one. That's roughly $33 to $51 an hour while you're answering. Look for the early bird tag for the top rate, and turn on email alerts to answer from your phone between classes.</p><div class="pitch-now">This week: <b>${s.week_count || 0}</b> answer${s.week_count === 1 ? "" : "s"}</div></div>
           <div class="goals"><div class="goal"><div class="row" style="justify-content:space-between"><b>Weekly goal</b><span class="mono">${Math.min(20, s.week_count || 0)}/20</span></div><div class="meter"><i style="width:${Math.min(100, (s.week_count || 0) * 5)}%"></i></div><small>Answer 20 questions this week to hit your goal.</small></div></div></div>
         <div class="tutor-tips" role="note"><b>Before you claim</b><ul><li>Only claim questions you're confident answering. You'll have 2 minutes, and students rate every answer.</li><li>Answer in your own words. AI-written answers are flagged, and repeated flags pause your tutoring.</li></ul></div>
         <div id="ai-banner"></div>
         <a class="my-answers-link" href="#/tutor/answers"><span><b>Your answers</b><span class="muted"> · ${s.answers_count || 0} so far</span></span><span>View all →</span></a>
-        <div class="results-head"><h2>Pending questions</h2><span class="muted" style="font-size:13px">You can hold one question at a time</span></div>
+        <div class="results-head"><h2>Ready to claim</h2><span class="muted" style="font-size:13px">You can hold one question at a time</span></div>
+        <label class="check more-toggle"><input type="checkbox" id="feed-more"><span><b>Show more questions</b> from related courses (same subject area). Only claim the ones you're confident answering: students rate every answer.</span></label>
         <div class="col" id="feed"><div class="boot" style="min-height:80px">Loading questions…</div></div>
+        <div class="results-head" id="done-head" hidden><h2>Answered recently</h2><a href="#/tutor/answers" style="font-size:13px">All your answers →</a></div>
+        <div class="col" id="feed-done"></div>
       </div></div>`;
     $("#al-toggle").onchange = async e => { const on = e.target.checked; try { await saveProfile({ email_alerts: on, alerts_asked: true, email_alerts_at: on ? new Date().toISOString() : null }); toast(on ? "Email alerts are on" : "Email alerts are off"); } catch (err) { e.target.checked = !on; toast(errMsg(err)); } };
     if (!p.alerts_asked) setTimeout(askAlerts, 600);
@@ -979,6 +982,9 @@
       try { await saveProfile({ myequals_link: link || null }); status($("#eq-st"), link ? "Saved. We'll check it and add your checkmark." : "Link removed.", "ok"); } catch (e) { status($("#eq-st"), errMsg(e), "err"); }
     };
     loadWithdraw();
+    const mt = $("#feed-more");
+    try { mt.checked = localStorage.getItem("feed-more") === "1"; } catch (_) { }
+    mt.onchange = () => { try { localStorage.setItem("feed-more", mt.checked ? "1" : "0"); } catch (_) { } if (mt.checked) toast("Showing more questions. Only claim ones you're confident answering.", 4000); renderFeed(); };
     await renderFeed();
     every(20000, renderFeed);
     $("#feed").addEventListener("click", async e => {
@@ -1054,15 +1060,24 @@
   }
 
   async function renderFeed() {
-    const el = $("#feed"); if (!el) return;
-    const { data, error } = await sb.rpc("tutor_feed");
+    const el = $("#feed"), done = $("#feed-done"); if (!el) return;
+    const more = !!($("#feed-more") && $("#feed-more").checked);
+    const { data, error } = await sb.rpc("tutor_feed", { p_more: more });
     if (error) { el.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
     const now = Date.now();
     const holding = data.find(q => q.my_claim_expires && new Date(q.my_claim_expires) > now && q.my_position == null);
-    const rank = q => (q.my_position != null ? 3 : 0) + (q.answer_count >= q.slots ? 2 : 0) + (q.urgent && new Date(q.created_at).getTime() + URGENT_MIN * 60e3 > now ? 0 : 1);
-    data.sort((a, b) => rank(a) - rank(b) || new Date(b.created_at) - new Date(a.created_at));
-    el.innerHTML = data.length ? data.map(q => feedCard(q, holding)).join("") : `<div class="empty">No open questions in your courses right now. New ones show up here automatically.</div>`;
-    autoTranslate(el);
+    const answered = data.filter(q => q.my_position != null);
+    // Open = still accepting answers and not answered by you
+    const open = data.filter(q => q.my_position == null && new Date(q.expires_at) > now && q.answer_count < q.slots);
+    const rank = q => (q.my_claim_expires && new Date(q.my_claim_expires) > now ? -1 : 0) + (q.urgent && new Date(q.created_at).getTime() + URGENT_MIN * 60e3 > now ? 0 : 1) + (q.extra ? 2 : 0);
+    open.sort((a, b) => rank(a) - rank(b) || new Date(b.created_at) - new Date(a.created_at));
+    el.innerHTML = open.length ? open.map(q => feedCard(q, holding)).join("")
+      : `<div class="empty">There are no new questions to claim right now. ${more ? "" : "Tick <b>Show more questions</b> to see ones from related courses, or "}${S.profile.email_alerts ? "we'll email you when one comes in." : "turn on email alerts so you hear about the next one."}</div>`;
+    if (done) {
+      done.innerHTML = answered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).map(q => feedCard(q, holding)).join("");
+      $("#done-head").hidden = !answered.length;
+    }
+    autoTranslate(el); if (done) autoTranslate(done);
   }
   function feedCard(q, holding) {
     const now = Date.now(), ebEnd = new Date(q.created_at).getTime() + URGENT_MIN * 60e3;
@@ -1082,7 +1097,7 @@
       <div class="tq-head"><div class="avatar sm" aria-hidden="true">${esc(initials(q.asker_name))}</div>
         <div style="min-width:0;flex:1"><b data-notr>${esc(q.asker_name)}</b><div class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</div></div>
         <div class="reward-box${eb ? " eb" : ""}">${eb ? `<span class="eb-tag">Early bird</span><b>${money(URGENT_PAY)}</b><small>${mins(ebEnd - now)} min left, then ${money(PAY)}</small>` : `<b>${money(PAY)}</b><small>Reward</small>`}</div></div>
-      <div class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="muted" style="font-size:13px">${esc(q.course_title)}</span>${similar ? `<span class="simchip">Similar to your ${esc(q.match_code)}</span>` : ""}</div>
+      <div class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="muted" style="font-size:13px">${esc(q.course_title)}</span>${q.extra ? `<span class="simchip related">Related to your ${esc(q.match_code || "courses")}</span>` : similar ? `<span class="simchip">Similar to your ${esc(q.match_code)}</span>` : ""}</div>
       ${(q.goals || []).length ? `<div class="goals-row"><span class="muted">After</span>${goalChips(q.goals)}</div>` : ""}
       <div data-trslot><p class="q-text" data-tr>${esc(q.body)}</p></div>
       ${q.attachment_name ? `<span class="fchip">${q.attachment_type === "application/pdf" ? "PDF" : "IMG"} · ${esc(q.attachment_name)} · ${kb(q.attachment_size || 0)}</span>` : ""}
@@ -1094,7 +1109,7 @@
   const drafts = {};
   async function pageAnswer(id) {
     app().innerHTML = `<div class="boot">Loading question…</div>`;
-    const { data, error } = await sb.rpc("tutor_feed"); if (error) throw error;
+    const { data, error } = await sb.rpc("tutor_feed", { p_more: true }); if (error) throw error;
     const q = data.find(x => x.id === id);
     if (!q) { app().innerHTML = `<div class="empty">This question isn't available to you. <a href="#/tutor">Back to questions</a></div>`; return; }
     if (q.my_position != null) { toast("You've already answered this question"); location.hash = "#/tutor"; return; }
@@ -1150,10 +1165,10 @@
     every(1000, paintClaim);
 
     function renderBubbles() {
-      $("#bubbles").innerHTML = d.bubbles.map((b, i) => `<div class="b-row"><textarea class="prose" data-b="${i}" maxlength="800" placeholder="${i === 0 ? "Start with the key idea…" : "Add more detail…"}" aria-label="Message ${i + 1}">${esc(b)}</textarea>${d.bubbles.length > 1 ? `<button class="btn ghost sm" data-rm="${i}" aria-label="Remove message ${i + 1}">×</button>` : ""}</div>`).join("");
+      $("#bubbles").innerHTML = d.bubbles.map((b, i) => `<div class="b-row"><textarea class="prose" data-b="${i}" maxlength="${A_MAX}" placeholder="${i === 0 ? "Start with the key idea…" : "Add more detail…"}" aria-label="Message ${i + 1}">${esc(b)}</textarea>${d.bubbles.length > 1 ? `<button class="btn ghost sm" data-rm="${i}" aria-label="Remove message ${i + 1}">×</button>` : ""}</div>`).join("");
       updateTotal();
     }
-    function updateTotal() { const t = d.bubbles.reduce((a, b) => a + b.length, 0); const el = $("#total"); el.textContent = `${t} / 2500 characters`; el.classList.toggle("over", t > 2500); }
+    function updateTotal() { const t = d.bubbles.reduce((a, b) => a + b.length, 0); const el = $("#total"); el.textContent = `${t} / ${A_MAX} characters`; el.classList.toggle("over", t > A_MAX); }
     $("#bubbles").addEventListener("input", e => { const i = e.target.dataset.b; if (i != null) { d.bubbles[+i] = e.target.value; updateTotal(); } });
     // Typing only: no pasting, dropping or inserting text any other way. Count what's actually typed.
     d.typed = d.typed || 0;
@@ -1201,12 +1216,12 @@
       reviewing = true;
       const { bubbles, total } = answerParts();
       const c = docApi ? DocView.count(docApi.annotations) : { strokes: 0, notes: 0 };
-      const tooShort = !bubbles.length || total < 30, tooLong = total > 2500;
+      const tooShort = !bubbles.length || total < 30, tooLong = total > A_MAX;
       openModal(`<h3>${timeUp ? "Time's up. Review your answer" : "Review your answer"}</h3>
         <p class="muted" style="font-size:14px">Check it reads right. Once it's posted, the student sees it straight away and it can't be changed.</p>
         <div class="bubbles review-bubbles">${bubbles.length ? bubbles.map(b => `<div class="bubble">${esc(b)}</div>`).join("") : '<p class="muted">You haven\'t written anything.</p>'}</div>
         ${docApi ? `<p class="muted" style="font-size:13px">Plus ${c.notes} note${c.notes === 1 ? "" : "s"} and ${c.strokes} drawing${c.strokes === 1 ? "" : "s"} on the student's document.</p>` : ""}
-        ${tooShort ? '<div class="status err">Too short to post. Answers need at least 30 characters.</div>' : tooLong ? '<div class="status err">Too long to post. Keep it under 2,500 characters.</div>' : ""}
+        ${tooShort ? '<div class="status err">Too short to post. Answers need at least 30 characters.</div>' : tooLong ? '<div class="status err">Too long to post. Keep it to ${A_MAX} characters or fewer.</div>' : ""}
         ${timeUp ? '<p class="claim-clock" id="rv-clock" style="align-self:flex-start"></p>' : ""}
         <div id="rv-st" hidden></div>
         <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><button class="btn ghost" id="rv-drop">Don't post</button>

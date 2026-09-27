@@ -16,7 +16,7 @@ Live site: https://distinction.onrender.com
 
 **Students**
 - Choose from 40 Australian universities and a searchable course list (any course code can be typed and is added to the catalogue)
-- 50-word questions with one PDF or image (up to 5 MB)
+- Questions up to 300 characters with one PDF or image (up to 5 MB)
 - Distinction and HD, or HD only; optional My eQuals verified tutors; similar courses at other unis
 - 2, 3 or 5 answers; urgent (within 20 minutes) or standard (usually within an hour); open for 1 hour to 1 day
 - See answers as they arrive, view each tutor's markup on your document, rate answers, report problems
@@ -75,6 +75,7 @@ Run these in the Supabase SQL editor, in order (all safe to re-run):
 19. `supabase/migration_18_payouts_and_stripe.sql`: tutor withdrawals ($20 minimum, paid by PayID) and Stripe card top-ups
 20. `supabase/migration_19_widen_reach.sql`: questions that would reach fewer than 10 tutors are widened to related courses (same subject prefix)
 21. `supabase/migration_20_review_and_history.sql`: 3-minute hold (2 to write, 1 to review), and `my_answers()` for tutors' answer history
+22. `supabase/migration_21_more_questions_and_char_limits.sql`: opt-in "show more questions" for tutors; questions up to 300 characters and answers up to 500
 
 Add test credits to an account (until payments launch):
 
