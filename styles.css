@@ -605,3 +605,5 @@ fieldset.goals legend small{font-weight:400;margin-left:4px}
 .now-hiring{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px;padding:7px 12px;border-radius:999px;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));color:var(--ink);text-decoration:none;margin-bottom:12px}
 .now-hiring:hover{border-color:var(--accent)}
 .now-hiring b{color:var(--accent)}
+.hiring-tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line));border-radius:999px;padding:3px 10px}
+.tutors-panel{border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
