@@ -73,6 +73,7 @@ Run these in the Supabase SQL editor, in order (all safe to re-run):
 17. `supabase/migration_16_ai_checks.sql`: AI-writing checks on answers (flag over 40%, tutor warning, admin AI flags tab)
 18. `supabase/migration_17_ai_pause.sql`: tutoring pauses automatically after 3 AI flags in 30 days; admins can lift it
 19. `supabase/migration_18_payouts_and_stripe.sql`: tutor withdrawals ($20 minimum, paid by PayID) and Stripe card top-ups
+20. `supabase/migration_19_widen_reach.sql`: questions that would reach fewer than 10 tutors are widened to related courses (same subject prefix)
 
 Add test credits to an account (until payments launch):
 
