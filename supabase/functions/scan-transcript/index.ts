@@ -1,5 +1,7 @@
 // Supabase Edge Function: scan-transcript
-// Reads a tutor's uploaded transcript (PDF or image) with Claude and returns the courses and marks.
+// Reads a tutor's uploaded transcript (PDF or image) with Claude and returns only the courses and marks.
+// Personal details (name, student number, address, date of birth) are never extracted, and the uploaded
+// file is deleted as soon as it has been read.
 // The Anthropic API key lives in the function's secrets (ANTHROPIC_API_KEY), never in the website.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -14,13 +16,14 @@ const json = (body: unknown, status = 200) =>
 
 const PROMPT = `You are reading an Australian university academic transcript or academic statement.
 Extract every course (also called a unit or subject) that has a numeric mark.
+Privacy: do NOT output the student's name, student number, address, date of birth, email, phone number or any other personal detail. Only the university name and the courses.
 Reply with ONLY a JSON object, no other text, in this shape:
-{"name":"student name or empty string","university":"university name or empty string","courses":[{"code":"COMP1511","title":"Programming Fundamentals","term":"2024 T1","mark":87,"grade":"HD"}]}
+{"university":"university name or empty string","courses":[{"code":"COMP1511","title":"Programming Fundamentals","term":"2024 T1","mark":87,"grade":"HD"}]}
 Rules:
 - code: the course code exactly as printed, uppercase, with no spaces (e.g. "COMP 1511" becomes "COMP1511").
 - mark: an integer from 0 to 100. Skip courses with no numeric mark (e.g. in-progress, credit transfer, or satisfactory-only).
 - grade: as printed (HD, DN, D, DI, CR, C, PS, P, FL, F, and so on). If missing, derive it: 85+ HD, 75-84 DN, 65-74 CR, 50-64 PS, below 50 FL.
-- Never invent courses or marks. If this is not a transcript, return {"name":"","university":"","courses":[]}.`;
+- Never invent courses or marks. If this is not a transcript, return {"university":"","courses":[]}.`;
 
 function toBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
@@ -67,13 +70,18 @@ Deno.serve(async (req) => {
       messages: [{ role: "user", content: [block, { type: "text", text: PROMPT }] }],
     }),
   });
+  // The file has been read: delete it so no copy of the transcript (with its personal details) is kept
+  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { error: rmErr } = await admin.storage.from("transcripts").remove([path]);
+  if (rmErr) console.error("delete transcript", rmErr);
+
   if (!res.ok) {
     console.error("Anthropic error", res.status, await res.text());
     return json({ error: "The scanner couldn't read this file. Add your courses manually." }, 502);
   }
   const out = await res.json();
   const text: string = (out.content ?? []).filter((c: { type: string }) => c.type === "text").map((c: { text: string }) => c.text).join("");
-  let parsed: { name?: string; university?: string; courses?: unknown[] } = {};
+  let parsed: { university?: string; courses?: unknown[] } = {};
   try {
     const start = text.indexOf("{"), end = text.lastIndexOf("}");
     parsed = JSON.parse(text.slice(start, end + 1));
@@ -90,11 +98,16 @@ Deno.serve(async (req) => {
     }))
     .filter((c) => /^[A-Z0-9]{3,12}$/.test(c.code) && Number.isFinite(c.mark) && c.mark >= 0 && c.mark <= 100)
     .slice(0, 80);
-  // Save the scan server-side. Applications use this copy, so marks can't be edited in the browser.
-  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { error: saveErr } = await admin.from("transcript_scans").insert({
-    user_id: user.id, path, courses, name: String(parsed.name ?? "").slice(0, 120), university: String(parsed.university ?? "").slice(0, 120),
-  });
+  // Save only the courses and marks server-side. Applications use this copy, so marks can't be edited in the browser.
+  const { data: saved, error: saveErr } = await admin.from("transcript_scans").insert({
+    user_id: user.id, path, courses, university: String(parsed.university ?? "").slice(0, 120),
+  }).select("fingerprint").single();
   if (saveErr) { console.error("save scan", saveErr); return json({ error: "Couldn't save the scan. Try again." }, 500); }
-  return json({ name: parsed.name ?? "", university: parsed.university ?? "", courses });
+  // Is this exact set of courses and marks already registered to someone else?
+  let duplicate = false;
+  if (saved && saved.fingerprint) {
+    const { data: fp } = await admin.from("transcript_fingerprints").select("user_id").eq("fingerprint", saved.fingerprint).neq("user_id", user.id).limit(1);
+    duplicate = !!(fp && fp.length);
+  }
+  return json({ university: parsed.university ?? "", courses, duplicate });
 });

@@ -768,9 +768,9 @@
   function tutorPitch() {
     app().innerHTML = `<section class="view"><div class="intro"><div>
       <h1>Turn your best marks into up to $34 an hour.</h1>
-      <p>Upload your transcript and we'll check it. Every course where you got a Distinction (75+) or High Distinction becomes a course you can tutor. Then answer short questions from students for $1.10 each, or $1.70 for urgent questions answered within 20 minutes. Most take about 3 minutes.</p>
+      <p>Upload your transcript and our AI reads your marks in about 20 seconds. Every course where you got a Distinction (75+) or High Distinction becomes a course you can tutor, straight away. Then answer short questions from students for $1.10 each, or $1.70 for urgent questions answered within 20 minutes. Most take about 3 minutes.</p>
       <div class="cta-row"><a class="btn primary" href="#/tutor/apply">Apply to tutor</a></div></div>
-      <div class="how"><div><span class="stepno">STEP 1</span><b>Profile</b><p>Your uni, degree and a short intro.</p></div><div><span class="stepno">STEP 2</span><b>Transcript</b><p>Upload it. We read your marks automatically.</p></div><div><span class="stepno">STEP 3</span><b>Review</b><p>We confirm your transcript, usually within 48 hours.</p></div></div>
+      <div class="how"><div><span class="stepno">STEP 1</span><b>Profile</b><p>Your uni, degree and a short intro.</p></div><div><span class="stepno">STEP 2</span><b>Transcript</b><p>Upload it. AI reads your courses and marks, then the file is deleted.</p></div><div><span class="stepno">STEP 3</span><b>Start tutoring</b><p>Approved instantly for every course at 75 or above.</p></div></div>
     </div></section>`;
   }
   async function tutorPending() {
@@ -782,8 +782,8 @@
   }
   async function tutorRejected() {
     const { data: apps } = await sb.from("tutor_applications").select("admin_notes, reviewed_at").eq("user_id", S.user.id).order("submitted_at", { ascending: false }).limit(1);
-    app().innerHTML = `<div class="medium"><div class="panel pending-card"><span class="status-pill rejected">Not approved</span><h1 style="font-size:28px">We couldn't approve your application</h1>
-      ${apps && apps[0] && apps[0].admin_notes ? `<p><b>Reviewer's note:</b> ${esc(apps[0].admin_notes)}</p>` : `<p class="muted">We couldn't match your courses to your transcript.</p>`}
+    app().innerHTML = `<div class="medium"><div class="panel pending-card"><span class="status-pill rejected">Not approved</span><h1 style="font-size:28px">Your application was rejected</h1>
+      ${apps && apps[0] && apps[0].admin_notes ? `<p>${esc(apps[0].admin_notes)}</p>` : `<p class="muted">We couldn't match your courses to your transcript.</p>`}
       <a class="btn primary" href="#/tutor/apply">Apply again</a></div></div>`;
   }
 
@@ -1004,8 +1004,9 @@
     }
     function step2() {
       $("#body").innerHTML = `<h2>Upload your transcript</h2>
-        <p class="muted" style="font-size:14px">Upload your official academic transcript or statement as a PDF or screenshot. Marks can't be typed in or changed, and our team checks every transcript before approving.</p>
-        <div class="ai-note"><span class="ai-spark" aria-hidden="true">✦</span><span><b>Our AI reads your transcript for you.</b> After you upload, it scans the document and pulls out every course code, mark and grade. This takes about 10 to 20 seconds, so keep this page open.</span></div>
+        <p class="muted" style="font-size:14px">Upload your official academic transcript or statement as a PDF or screenshot. Marks come straight from the document and can't be typed in or changed.</p>
+        <div class="ai-note"><span class="ai-spark" aria-hidden="true">✦</span><span><b>Our AI reads your transcript for you.</b> It scans the document and pulls out every course code and mark. This takes about 10 to 20 seconds, so keep this page open.</span></div>
+        <div class="ai-note privacy"><span class="ai-spark" aria-hidden="true">🔒</span><span><b>Your personal details are scrubbed.</b> The AI is set up to ignore your name, student number, address, date of birth and any other personal information. Your transcript file is deleted from our records as soon as it has been read. Only your courses and their marks are saved.</span></div>
         <label class="drop" id="drop" for="tfile"><strong>${A.file ? esc(A.file.name) : "Drop your transcript here"}</strong><span class="muted" style="font-size:14px">PDF or image, up to 10 MB. Or click to choose a file.</span><input type="file" id="tfile" accept="${FILE_TYPES.join(",")}" hidden></label>
         <div id="st" hidden></div>
         <div id="tbl"></div>
@@ -1031,32 +1032,38 @@
         const scan = scanAnimation($("#tbl"));
         try {
           const { data, error } = await sb.functions.invoke("scan-transcript", { body: { path } });
+          A.scanResult = data || null;
           if (!error && data && Array.isArray(data.courses)) { A.courses = data.courses.sort((a, b) => b.mark - a.mark); A.scanned = true; }
         } catch (e) { /* handled below */ }
         await scan.finish(A.courses.length > 0);
         busy = false; $("#next").disabled = false;
         const n = A.courses.filter(c => c.mark >= 75).length;
-        if (A.courses.length) status($("#st"), `We read ${A.courses.length} courses from your transcript. ${n} ${n === 1 ? "has" : "have"} a mark of 75 or more and will be sent for approval.`, "ok");
-        else status($("#st"), "We couldn't read your courses automatically. You can still continue: our team will read them from your transcript during review.", "");
+        A.duplicate = !!(A.scanResult && A.scanResult.duplicate);
+        if (A.duplicate) status($("#st"), "This transcript is already registered to another Distinction account, so it can't be used again. Each tutor must use their own transcript.", "err");
+        else if (!A.courses.length) status($("#st"), "The AI couldn't find any courses with marks in that file. Try a clearer PDF or a full-page screenshot of your transcript. Your file has already been deleted.", "err");
+        else if (!n) status($("#st"), `The AI found ${A.courses.length} courses, but none has a mark of 75 or more yet, so there's nothing to tutor. Your file has been deleted.`, "err");
+        else status($("#st"), `Done. Your file has been deleted. The AI found ${A.courses.length} courses, and ${n} ${n === 1 ? "has" : "have"} a mark of 75 or more, so you can tutor ${n === 1 ? "it" : "them"}.`, "ok");
         table();
       }
       function table() {
         if (!A.courses.length) { $("#tbl").innerHTML = ""; return; }
-        $("#tbl").innerHTML = `<div class="table-wrap"><table><thead><tr><th>Code</th><th>Course</th><th>Mark</th><th>Grade</th><th></th></tr></thead><tbody>
+        $("#tbl").innerHTML = `<p style="font-size:14px;margin:0"><b>What the AI read from your transcript</b></p><div class="table-wrap"><table><thead><tr><th>Code</th><th>Course</th><th>Mark</th><th>Grade</th><th></th></tr></thead><tbody>
           ${A.courses.map(c => `<tr class="${c.mark >= 75 ? "" : "ineligible"}"><td class="mono">${esc(c.code)}</td><td>${esc(c.title)}</td><td class="num">${c.mark}</td><td><span class="badge ${gcls(c.grade || gradeFor(c.mark))}">${esc(c.grade || gradeFor(c.mark))}</span></td><td>${c.mark >= 75 ? '<span class="elig yes">Can tutor</span>' : '<span class="elig">Below 75</span>'}</td></tr>`).join("")}
           </tbody></table></div>
-          <p class="muted" style="font-size:13px">Something missing or wrong? Continue anyway. Our reviewer checks your transcript and can add courses the scan missed.</p>`;
+          <p class="muted" style="font-size:13px">Something missing or wrong? Upload a clearer copy and the AI will read it again.</p>`;
       }
       table();
       $("#back").onclick = () => { A.step = 1; render(); };
       $("#next").onclick = () => {
         if (busy) return;
         if (!A.path) return status($("#st"), "Upload your transcript first.", "err");
+        if (A.duplicate) return status($("#st"), "This transcript is already registered to another account, so it can't be used again.", "err");
+        if (!A.courses.some(c => c.mark >= 75)) return status($("#st"), "You need at least one course with a mark of 75 or more to tutor. Upload a different transcript if this one's wrong.", "err");
         A.step = 3; render();
       };
     }
     function step3() {
-      const rules = ["I'll explain concepts in my own words and won't complete assessable work for students.", "I won't share past assignments, exam answers or files. I'll only answer with text and markup on the student's document.", "The transcript I uploaded is my own, official and unedited."];
+      const rules = ["I'll explain concepts in my own words and won't complete assessable work for students.", "I won't share past assignments, exam answers or files. I'll only answer with text and markup on the student's document.", "The transcript I uploaded is my own, official and unedited. Using someone else's transcript gets my account removed."];
       $("#body").innerHTML = `<h2>Verification</h2>
         <p class="muted" style="font-size:14px">Add a My eQuals link to get a <b>✓ My eQuals</b> checkmark on your profile. My eQuals is the official digital transcript service used by Australian universities. It's optional: you can skip it now and add it later from your tutor profile.</p>
         <div class="panel" style="background:var(--surface-2);gap:10px;padding:16px">
@@ -1085,16 +1092,18 @@
     function step4() {
       const good = A.courses.filter(c => c.mark >= 75);
       $("#body").innerHTML = `<h2>Review and submit</h2>
-        <dl class="kv"><dt>Name</dt><dd>${esc(S.profile.full_name || "")} (${esc(S.profile.display_name || "")})</dd><dt>University</dt><dd>${esc(uniName(S.profile.uni_id))}</dd><dt>Degree</dt><dd>${esc(S.profile.degree || "")}</dd><dt>Transcript</dt><dd>${esc(A.file.name)}</dd><dt>My eQuals</dt><dd>${A.myequals ? "Link provided" : "Not yet. You can add it later for the checkmark."}</dd></dl>
-        ${good.length ? `<p style="font-size:14px"><b>Courses sent for approval</b></p><ul class="courses">${good.map(c => `<li><span class="code">${esc(c.code)}</span><span class="ttl">${esc(c.title)}</span><span class="grade">${c.mark}<span class="badge ${gcls(c.grade || gradeFor(c.mark))}">${esc(c.grade || gradeFor(c.mark))}</span></span></li>`).join("")}</ul>` : `<div class="status">Our reviewer will read your courses from your transcript and approve the ones at 75 or above.</div>`}
+        <dl class="kv"><dt>Name</dt><dd>${esc(S.profile.full_name || "")} (${esc(S.profile.display_name || "")})</dd><dt>University</dt><dd>${esc(uniName(S.profile.uni_id))}</dd><dt>Degree</dt><dd>${esc(S.profile.degree || "")}</dd><dt>Transcript</dt><dd>Read by AI, then deleted</dd><dt>My eQuals</dt><dd>${A.myequals ? "Link provided" : "Not yet. You can add it later for the checkmark."}</dd></dl>
+        ${good.length ? `<p style="font-size:14px"><b>You'll be approved to tutor these ${good.length} course${good.length === 1 ? "" : "s"} straight away</b></p><ul class="courses">${good.map(c => `<li><span class="code">${esc(c.code)}</span><span class="ttl">${esc(c.title)}</span><span class="grade">${c.mark}<span class="badge ${gcls(c.grade || gradeFor(c.mark))}">${esc(c.grade || gradeFor(c.mark))}</span></span></li>`).join("")}</ul>` : `<div class="status err">No courses with a mark of 75 or more. Go back and upload your transcript.</div>`}
         <div id="st" hidden></div>
-        <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="go">Submit application</button></div>`;
+        <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="go" ${good.length ? "" : "disabled"}>Submit and start tutoring</button></div>`;
       $("#back").onclick = () => { A.step = 3; render(); };
       $("#go").onclick = async () => {
         $("#go").disabled = true; status($("#st"), "Submitting…", "", true);
-        const { error } = await sb.rpc("submit_tutor_application", { p_transcript_path: A.path, p_transcript_name: A.file.name, p_myequals: A.myequals });
+        const { data, error } = await sb.rpc("submit_tutor_application", { p_transcript_path: A.path, p_transcript_name: A.file.name, p_myequals: A.myequals });
         if (error) { $("#go").disabled = false; return status($("#st"), errMsg(error), "err"); }
-        await loadProfile(); renderHeader(); toast("Application submitted"); location.hash = "#/tutor";
+        await loadProfile(); renderHeader();
+        if (!data) { toast("Application rejected"); location.hash = "#/tutor"; return; }
+        toast("You're approved. Welcome aboard!"); location.hash = "#/tutor";
       };
     }
     function render() { paintSteps(); ({ 1: step1, 2: step2, 3: step3, 4: step4 })[A.step](); window.scrollTo(0, 0); }
@@ -1177,7 +1186,7 @@
       const url = await signedUrl("transcripts", cur.transcript_path);
       const type = /\.pdf$/i.test(cur.transcript_path) ? "application/pdf" : "image/png";
       await DocView.mount($("#ad-doc"), { url, type, editable: false });
-    } catch (e) { $("#ad-doc").innerHTML = `<div class="status err">Couldn't open the transcript: ${esc(errMsg(e))}</div>`; }
+    } catch (e) { $("#ad-doc").innerHTML = `<div class="status">The transcript file was deleted after the AI read it. The courses and marks below are what it found.</div>`; }
     const decide = async approve => {
       const ids = $$("#ad-form [data-c]").filter(x => x.checked).map(x => +x.dataset.c);
       if (approve && !ids.length) return status($("#st"), "Tick at least one course, or reject the application.", "err");

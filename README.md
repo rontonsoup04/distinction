@@ -68,6 +68,7 @@ Run these in the Supabase SQL editor, in order (all safe to re-run):
 12. `supabase/migration_11_goals.sql`: "What are you after?" (answers, explanation, expertise, experience, check my work, course-specific). Course-specific keeps a question at the student's uni
 13. `supabase/migration_12_hd_fee.sql`: HD only adds $0.50 per answer
 14. `supabase/migration_13_ensure_profile.sql`: repairs a signed-in account whose profile row is missing
+15. `supabase/migration_14_auto_approve.sql`: tutors are approved instantly from the AI scan; names aren't kept; the same transcript (identical courses and marks) can't be used by two accounts
 
 Add test credits to an account (until payments launch):
 
