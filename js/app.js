@@ -1431,8 +1431,8 @@
   /* ---------------- admin ---------------- */
   async function pageAdmin() {
     if (!S.profile.is_admin) { app().innerHTML = `<div class="empty">Admins only.</div>`; return; }
-    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">Admin</h1><div class="seg" style="min-width:360px"><label><input type="radio" name="ad" value="apps" checked><span>Applications</span></label>${FEATURES.equals ? '<label><input type="radio" name="ad" value="equals"><span>My eQuals</span></label>' : ""}<label><input type="radio" name="ad" value="reports"><span>Reports</span></label><label><input type="radio" name="ad" value="ai"><span>AI flags</span></label><label><input type="radio" name="ad" value="pay"><span>Payouts</span></label></div></div><div id="ad-body"></div></section>`;
-    document.querySelectorAll('input[name="ad"]').forEach(r => r.onchange = () => r.value === "apps" ? adminApps() : r.value === "equals" ? adminEquals() : r.value === "ai" ? adminAI() : r.value === "pay" ? adminPayouts() : adminReports());
+    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">Admin</h1><div class="seg" style="min-width:360px"><label><input type="radio" name="ad" value="apps" checked><span>Applications</span></label>${FEATURES.equals ? '<label><input type="radio" name="ad" value="equals"><span>My eQuals</span></label>' : ""}<label><input type="radio" name="ad" value="reports"><span>Reports</span></label><label><input type="radio" name="ad" value="ai"><span>AI flags</span></label><label><input type="radio" name="ad" value="pay"><span>Payouts</span></label><label><input type="radio" name="ad" value="credits"><span>Credits</span></label></div></div><div id="ad-body"></div></section>`;
+    document.querySelectorAll('input[name="ad"]').forEach(r => r.onchange = () => r.value === "apps" ? adminApps() : r.value === "equals" ? adminEquals() : r.value === "ai" ? adminAI() : r.value === "pay" ? adminPayouts() : r.value === "credits" ? adminCredits() : adminReports());
     adminApps();
   }
   async function adminApps(selected) {
@@ -1496,6 +1496,37 @@
     const { data, error } = await sb.from("reports").select("*, answer:answers(bubbles, tutor_id, question_id, created_at)").order("created_at", { ascending: false }).limit(50);
     if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
     body.innerHTML = data.length ? `<div class="col">${data.map(r => `<div class="answer-card"><div class="row" style="justify-content:space-between"><b>Report</b><span class="muted" style="font-size:12px">${ago(r.created_at)}</span></div><p>${esc(r.reason || "")}</p><div class="bubbles">${((r.answer && r.answer.bubbles) || []).map(b => `<div class="bubble">${esc(b)}</div>`).join("")}</div></div>`).join("")}</div>` : `<div class="empty">No reports.</div>`;
+  }
+
+  /* Give (or take back) credits on any account */
+  async function adminCredits() {
+    const body = $("#ad-body");
+    body.innerHTML = `<div class="panel" style="max-width:520px;gap:12px">
+      <h3 style="font-size:18px">Add credits to an account</h3>
+      <p class="muted" style="font-size:14px">Credits go straight onto the account and show in their history with your reason. Use a minus amount to take credits back.</p>
+      <label class="field"><span>Account email</span><input type="email" id="gc-email" placeholder="student@example.com" autocomplete="off"></label>
+      <label class="field"><span>Credits ($)</span><input type="number" id="gc-amt" step="0.5" min="-1000" max="1000" value="10"></label>
+      <label class="field"><span>Reason (shown to them)</span><input type="text" id="gc-label" maxlength="80" value="Credits added by Distinction"></label>
+      <div id="gc-st" hidden></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn primary" id="gc-go">Add credits</button></div></div>
+      <div class="panel" style="gap:6px"><div class="eyebrow">Recently added by admins</div><ul class="list" id="gc-recent"><li class="muted">Loading…</li></ul></div>`;
+    const recent = async () => {
+      const { data } = await sb.from("credit_tx").select("amount, label, created_at, user:profiles!credit_tx_user_id_fkey(full_name, display_name)").is("question_id", null).not("label", "ilike", "Top-up%").not("label", "ilike", "Test top-up%").order("created_at", { ascending: false }).limit(15);
+      $("#gc-recent").innerHTML = (data || []).map(t => `<li><span>${esc(t.user ? t.user.full_name || t.user.display_name : "")} · ${esc(t.label)} <span class="muted" style="font-size:12px">${ago(t.created_at)}</span></span><span class="amt ${t.amount > 0 ? "pos" : ""}">${t.amount > 0 ? "+" : ""}${money(Number(t.amount))}</span></li>`).join("") || '<li class="muted">None yet.</li>';
+    };
+    $("#gc-go").onclick = async () => {
+      const email = $("#gc-email").value.trim(), amt = Number($("#gc-amt").value), label = $("#gc-label").value.trim();
+      if (!email) return status($("#gc-st"), "Enter the account's email.", "err");
+      if (!amt) return status($("#gc-st"), "Enter an amount.", "err");
+      $("#gc-go").disabled = true;
+      const { data, error } = await sb.rpc("admin_grant_credits", { p_email: email, p_amount: amt, p_label: label });
+      $("#gc-go").disabled = false;
+      if (error) return status($("#gc-st"), errMsg(error), "err");
+      status($("#gc-st"), `Done. ${email} now has ${money(Number(data))} in credits.`, "ok");
+      if (S.user.email.toLowerCase() === email.toLowerCase()) refreshCredits();
+      recent();
+    };
+    recent();
   }
 
   async function adminPayouts() {
