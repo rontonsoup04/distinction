@@ -101,6 +101,12 @@
   const app = () => $("#app");
   function clearTimers() { S.timers.forEach(clearInterval); S.timers = []; }
   const clock = ms => { const t = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+  // Google Analytics: page views for the hash routes, plus a few key events. No personal details are sent.
+  const track = (name, params) => { try { window.gtag && gtag("event", name, params || {}); } catch (e) { } };
+  function trackPage(parts) {
+    const path = "/" + parts.map(x => /^[0-9a-f-]{20,}$/i.test(x) ? ":id" : x).filter(Boolean).join("/");
+    track("page_view", { page_location: location.origin + path, page_path: path, page_title: document.title + (path === "/" ? "" : " · " + parts[0]) });
+  }
   function every(ms, fn) { S.timers.push(setInterval(fn, ms)); }
   const refreshBtn = id => `<button type="button" class="btn ghost sm refresh" id="${id}" aria-label="Refresh"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Refresh</span></button>`;
   function wireRefresh(id, fn) {
@@ -118,6 +124,7 @@
     const r = parts[0] || "";
     renderHeader();
     window.scrollTo(0, 0);
+    trackPage(parts);
     if (!S.user && !PUBLIC.includes(r)) { sessionStorage.setItem("after-login", location.hash); location.hash = "#/login"; return; }
     if (S.user && ["login", "signup"].includes(r)) { location.hash = "#/"; return; }
     if (S.user && !S.profile && r !== "new-password") { app().innerHTML = `<div class="empty">We couldn't load your account. <button class="btn sm" id="retry-prof">Try again</button> <button class="btn ghost sm" id="so-prof">Sign out</button></div>`; $("#retry-prof").onclick = async () => { await loadProfile(); route(); }; $("#so-prof").onclick = async () => { await sb.auth.signOut(); location.hash = "#/login"; }; return; }
@@ -271,6 +278,7 @@
       const { data, error } = await sb.auth.signUp({ email, password, options: { data: { full_name }, emailRedirectTo: location.origin + "/" } });
       $("#go").disabled = false;
       if (error) return status($("#st"), /already registered/i.test(error.message) ? "There's already an account with that email. Log in instead." : errMsg(error), "err");
+      track("sign_up", { method: "email" });
       if (!data.session) {
         app().innerHTML = `<div class="narrow"><div class="panel auth-card"><h1>Check your email</h1><p>We sent a confirmation link to <b>${esc(email)}</b>. Open it to finish creating your account. You can close this tab.</p><p class="muted" style="font-size:14px">Can't find it? Check your spam folder.</p></div></div>`;
       }
@@ -558,6 +566,7 @@
         if (error) throw error;
         await refreshCredits();
         sb.functions.invoke("notify-tutors", { body: { question_id: data.id } }).catch(() => { });
+        track("post_question", { value: cost, currency: "AUD", answers: row.slots, urgent: row.urgent, hd_only: row.min_mark >= 85 });
         toast(`Question posted. ${money(cost)} used from your credits.`);
         location.hash = "#/q/" + data.id;
       } catch (err) { status(st, errMsg(err), "err"); btn.disabled = false; }
@@ -821,7 +830,7 @@
       }
       status($("#topup-st"), "Opening secure checkout…", "", true);
       const { data, error } = await sb.functions.invoke("create-checkout", { body: { pack: b.dataset.topup } });
-      if (!error && data && data.url) { location.href = data.url; return; }
+      if (!error && data && data.url) { try { sessionStorage.setItem("pending-pack", b.dataset.topup); } catch (_) { } track("begin_checkout", { value: { 10: 10, 21: 20, 55: 50 }[b.dataset.topup], currency: "AUD" }); location.href = data.url; return; }
       b.disabled = false;
       let msg = "Couldn't start the payment. Try again in a moment.";
       try { const j = error && error.context && await error.context.json(); if (j && j.error === "not_configured") msg = "Card payments aren't switched on yet."; else if (j && j.error) msg = j.error; } catch (_) { }
@@ -829,6 +838,7 @@
     });
     // Back from Stripe: the webhook adds the credits within a few seconds
     if (result === "paid") {
+      try { const pk = sessionStorage.getItem("pending-pack"); if (pk) { sessionStorage.removeItem("pending-pack"); const v = { 10: 10, 21: 20, 55: 50 }[pk]; track("purchase", { value: v, currency: "AUD", transaction_id: "topup-" + Date.now(), items: [{ item_id: "credits-" + pk, item_name: pk + " credits", price: v, quantity: 1 }] }); } } catch (_) { }
       const start = Number(S.profile.credits || 0); let tries = 0;
       const iv = setInterval(async () => {
         tries++; await refreshCredits();
@@ -1285,6 +1295,7 @@
         if (error) { $("#go").disabled = false; return status($("#st"), errMsg(error), "err"); }
         await loadProfile(); renderHeader();
         if (!data) { toast("Application rejected"); location.hash = "#/tutor"; return; }
+        track("tutor_approved", { courses: good.length });
         toast("You're approved. Welcome aboard!"); location.hash = "#/tutor";
       };
     }
