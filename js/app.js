@@ -128,7 +128,7 @@
         case "tutor": return await (parts[1] === "apply" ? pageTutorApply() : pageTutor());
         case "answer": return await pageAnswer(parts[1]);
         case "admin": return await pageAdmin();
-        case "credits": return await pageCredits();
+        case "credits": return await pageCredits(parts[1]);
         case "alerts-off": return await pageAlertsOff(parts[1], parts[2]);
         default: app().innerHTML = `<div class="empty">Page not found. <a href="#/">Go home</a></div>`;
       }
@@ -730,8 +730,10 @@
   }
 
   /* ---------------- credits ---------------- */
-  async function pageCredits() {
+  async function pageCredits(result) {
     await settle(); await refreshCredits();
+    const { data: fset } = await sb.from("app_settings").select("value").eq("key", "free_topups").maybeSingle();
+    const freeMode = !!(fset && String(fset.value) === "true");
     const { data: tx } = await sb.from("credit_tx").select("*").eq("user_id", S.user.id).order("created_at", { ascending: false }).limit(30);
     const bal = Number(S.profile.credits || 0);
     app().innerHTML = `<section class="view"><div class="wallet-grid">
@@ -746,19 +748,37 @@
         <p class="muted" style="font-size:13px">HD only adds ${money(HD_FEE)} per answer.</p>
         <div class="eyebrow" style="margin-top:6px">Top up</div>
         <div class="packs">${[[10, "$10", "Starter"], [21, "$20", "+1 bonus credit"], [55, "$50", "+5 bonus credits"]].map(([c, pr, note]) => `<button class="pack" data-topup="${c}"><b>${c}</b><span>credits · ${pr}</span><small>${note}</small></button>`).join("")}</div>
-        <div class="status" id="topup-st">Test mode: top-ups are free for now and no payment is taken.</div>
+        <div class="status${result === "paid" ? " ok" : ""}" id="topup-st">${result === "paid" ? "Payment received. Your credits are being added…" : result === "cancelled" ? "Payment cancelled. You weren't charged." : freeMode ? "Test mode: top-ups are free for now and no payment is taken." : "Pay securely by card with Stripe. Credits are added as soon as the payment goes through."}</div>
       </div>
       <div class="panel"><div class="eyebrow">History</div>
         <ul class="list">${(tx || []).map(t => `<li><span>${esc(t.label)} <span class="muted" style="font-size:12px">${ago(t.created_at)}</span></span><span class="amt ${t.amount > 0 ? "pos" : ""}">${t.amount > 0 ? "+" : ""}${money(Number(t.amount))}</span></li>`).join("") || '<li class="muted">No activity yet.</li>'}</ul>
       </div></div></section>`;
     $$("[data-topup]").forEach(b => b.onclick = async () => {
       b.disabled = true;
-      const { error } = await sb.rpc("test_topup", { p_credits: +b.dataset.topup });
+      if (freeMode) {
+        const { error } = await sb.rpc("test_topup", { p_credits: +b.dataset.topup });
+        b.disabled = false;
+        if (error) return status($("#topup-st"), errMsg(error), "err");
+        toast(`Added ${b.dataset.topup} credits`);
+        return pageCredits();
+      }
+      status($("#topup-st"), "Opening secure checkout…", "", true);
+      const { data, error } = await sb.functions.invoke("create-checkout", { body: { pack: b.dataset.topup } });
+      if (!error && data && data.url) { location.href = data.url; return; }
       b.disabled = false;
-      if (error) return status($("#topup-st"), errMsg(error), "err");
-      toast(`Added ${b.dataset.topup} credits`);
-      pageCredits();
+      let msg = "Couldn't start the payment. Try again in a moment.";
+      try { const j = error && error.context && await error.context.json(); if (j && j.error === "not_configured") msg = "Card payments aren't switched on yet."; else if (j && j.error) msg = j.error; } catch (_) { }
+      status($("#topup-st"), msg, "err");
     });
+    // Back from Stripe: the webhook adds the credits within a few seconds
+    if (result === "paid") {
+      const start = Number(S.profile.credits || 0); let tries = 0;
+      const iv = setInterval(async () => {
+        tries++; await refreshCredits();
+        if (Number(S.profile.credits || 0) > start || tries > 10) { clearInterval(iv); if (location.hash.startsWith("#/credits")) { history.replaceState(null, "", "#/credits"); pageCredits(); } }
+      }, 2000);
+      S.timers.push(iv);
+    }
   }
 
   /* One-click unsubscribe from an alert email */
@@ -864,7 +884,8 @@
       </aside>
       <div class="col">
         <div class="earn-strip"><div><div class="eyebrow" style="color:inherit;opacity:.7">Earned so far</div><div class="earn-amt">${money(Number(s.earned || 0))}</div></div>
-          <div class="earn-rules"><span><b>$1.10</b> per answer</span><span class="ebr"><b>$1.70</b> early bird, on marked questions answered within 20 min</span><span>Payouts start when payments launch. Your earnings are tracked from today.</span></div></div>
+          <div class="earn-rules"><span><b>$1.10</b> per answer</span><span class="ebr"><b>$1.70</b> early bird, on marked questions answered within 20 min</span></div>
+          <div class="withdraw"><div><div class="eyebrow" style="color:inherit;opacity:.7">Available to withdraw</div><div class="earn-amt" id="avail">…</div><small id="w-note" style="opacity:.8"></small></div><button class="btn" id="w-btn" disabled>Withdraw</button></div></div>
         <div class="pitch"><div class="pitch-main"><span class="eyebrow">Your earning potential</span><div class="pitch-big"><b>$1–2</b> every 3 minutes</div><p>Questions are 50 words or less, and you get 2 minutes to answer once you claim one. Look for the early bird tag to earn $1.70. Turn on email alerts and answer from your phone between classes.</p><div class="pitch-now">This week: <b>${s.week_count || 0}</b> answer${s.week_count === 1 ? "" : "s"}</div></div>
           <div class="goals"><div class="goal"><div class="row" style="justify-content:space-between"><b>Weekly goal</b><span class="mono">${Math.min(20, s.week_count || 0)}/20</span></div><div class="meter"><i style="width:${Math.min(100, (s.week_count || 0) * 5)}%"></i></div><small>Answer 20 questions this week to hit your goal.</small></div></div></div>
         <div class="tutor-tips" role="note"><b>Before you claim</b><ul><li>Only claim questions you're confident answering. You'll have 2 minutes, and students rate every answer.</li><li>Answer in your own words. AI-written answers are flagged, and repeated flags pause your tutoring.</li></ul></div>
@@ -885,6 +906,7 @@
       if (link && !/^https:\/\/([\w-]+\.)*myequals\.(edu\.au|net|org)\//i.test(link)) return status($("#eq-st"), "That doesn't look like a My eQuals link.", "err");
       try { await saveProfile({ myequals_link: link || null }); status($("#eq-st"), link ? "Saved. We'll check it and add your checkmark." : "Link removed.", "ok"); } catch (e) { status($("#eq-st"), errMsg(e), "err"); }
     };
+    loadWithdraw();
     await renderFeed();
     every(20000, renderFeed);
     $("#feed").addEventListener("click", async e => {
@@ -897,6 +919,42 @@
       }
     });
   }
+  /* Withdrawals: $20 minimum, paid by PayID */
+  async function loadWithdraw() {
+    const [{ data: b }, { data: reqs }] = await Promise.all([
+      sb.rpc("tutor_balance"),
+      sb.from("payout_requests").select("id, amount, payid, payid_name, status, admin_note, created_at, paid_at").eq("tutor_id", S.user.id).order("created_at", { ascending: false }).limit(5)
+    ]);
+    const bal = (b && b[0]) || { available: 0, pending: 0 };
+    const avail = Number(bal.available || 0), pending = (reqs || []).find(r => r.status === "pending");
+    if (!$("#avail")) return;
+    $("#avail").textContent = money(avail);
+    const rej = (reqs || [])[0] && reqs[0].status === "rejected" ? reqs[0] : null;
+    $("#w-note").textContent = rej && !pending ? `Your last request of ${money(Number(rej.amount))} wasn't paid${rej.admin_note ? `: ${rej.admin_note}` : ""}. It's back in your balance.` : pending ? `${money(Number(pending.amount))} on its way to your PayID` : avail >= 20 ? "Paid to your bank by PayID" : `Withdraw once you reach $20 (${money(Math.max(0, 20 - avail))} to go)`;
+    const btn = $("#w-btn"); btn.disabled = !!pending || avail < 20;
+    btn.onclick = () => {
+      const last = (reqs || [])[0] || {};
+      openModal(`<h3>Withdraw your earnings</h3>
+        <p class="muted" style="font-size:14px">We pay withdrawals by PayID, usually within 3 business days. The minimum is $20.</p>
+        <label class="field"><span>Amount</span><input type="number" id="w-amt" min="20" max="${avail}" step="0.01" value="${avail.toFixed(2)}"><small class="muted">Up to ${money(avail)}</small></label>
+        <label class="field"><span>PayID</span><input type="text" id="w-id" maxlength="120" value="${esc(last.payid || "")}" placeholder="Phone number, email or ABN linked to your bank"></label>
+        <label class="field"><span>Name on your PayID</span><input type="text" id="w-name" maxlength="120" value="${esc(last.payid_name || S.profile.full_name || "")}" placeholder="As shown by your bank"></label>
+        <div id="w-st" hidden></div>
+        <div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="w-go">Request withdrawal</button></div>`, m => {
+        $("#w-go", m).onclick = async () => {
+          const amount = Math.round(Number($("#w-amt", m).value) * 100) / 100;
+          if (!(amount >= 20)) return status($("#w-st", m), "The minimum withdrawal is $20.", "err");
+          if (amount > avail) return status($("#w-st", m), `You can withdraw up to ${money(avail)}.`, "err");
+          $("#w-go", m).disabled = true; status($("#w-st", m), "Sending your request…", "", true);
+          const { data, error } = await sb.functions.invoke("payout-request", { body: { amount, payid: $("#w-id", m).value.trim(), name: $("#w-name", m).value.trim() } });
+          let msg = null; if (error) { try { const j = await error.context.json(); msg = j && j.error; } catch (_) { } msg = msg || "Couldn't send your request. Try again."; }
+          if (msg) { $("#w-go", m).disabled = false; return status($("#w-st", m), msg, "err"); }
+          closeModal(); toast(`Withdrawal of ${money(amount)} requested. We'll send it to your PayID soon.`, 5000); loadWithdraw();
+        };
+      });
+    };
+  }
+
   async function renderFeed() {
     const el = $("#feed"); if (!el) return;
     const { data, error } = await sb.rpc("tutor_feed");
@@ -1223,8 +1281,8 @@
   /* ---------------- admin ---------------- */
   async function pageAdmin() {
     if (!S.profile.is_admin) { app().innerHTML = `<div class="empty">Admins only.</div>`; return; }
-    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">Admin</h1><div class="seg" style="min-width:360px"><label><input type="radio" name="ad" value="apps" checked><span>Applications</span></label><label><input type="radio" name="ad" value="equals"><span>My eQuals</span></label><label><input type="radio" name="ad" value="reports"><span>Reports</span></label><label><input type="radio" name="ad" value="ai"><span>AI flags</span></label></div></div><div id="ad-body"></div></section>`;
-    document.querySelectorAll('input[name="ad"]').forEach(r => r.onchange = () => r.value === "apps" ? adminApps() : r.value === "equals" ? adminEquals() : r.value === "ai" ? adminAI() : adminReports());
+    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">Admin</h1><div class="seg" style="min-width:360px"><label><input type="radio" name="ad" value="apps" checked><span>Applications</span></label><label><input type="radio" name="ad" value="equals"><span>My eQuals</span></label><label><input type="radio" name="ad" value="reports"><span>Reports</span></label><label><input type="radio" name="ad" value="ai"><span>AI flags</span></label><label><input type="radio" name="ad" value="pay"><span>Payouts</span></label></div></div><div id="ad-body"></div></section>`;
+    document.querySelectorAll('input[name="ad"]').forEach(r => r.onchange = () => r.value === "apps" ? adminApps() : r.value === "equals" ? adminEquals() : r.value === "ai" ? adminAI() : r.value === "pay" ? adminPayouts() : adminReports());
     adminApps();
   }
   async function adminApps(selected) {
@@ -1288,6 +1346,28 @@
     const { data, error } = await sb.from("reports").select("*, answer:answers(bubbles, tutor_id, question_id, created_at)").order("created_at", { ascending: false }).limit(50);
     if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
     body.innerHTML = data.length ? `<div class="col">${data.map(r => `<div class="answer-card"><div class="row" style="justify-content:space-between"><b>Report</b><span class="muted" style="font-size:12px">${ago(r.created_at)}</span></div><p>${esc(r.reason || "")}</p><div class="bubbles">${((r.answer && r.answer.bubbles) || []).map(b => `<div class="bubble">${esc(b)}</div>`).join("")}</div></div>`).join("")}</div>` : `<div class="empty">No reports.</div>`;
+  }
+
+  async function adminPayouts() {
+    const body = $("#ad-body");
+    const { data, error } = await sb.from("payout_requests").select("*, tutor:profiles!payout_requests_tutor_id_fkey(full_name, display_name, uni_id)").order("status").order("created_at", { ascending: false }).limit(100);
+    if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
+    const pend = data.filter(r => r.status === "pending");
+    body.innerHTML = `<p class="muted" style="font-size:14px">${pend.length ? `${pend.length} to pay · ${money(pend.reduce((a, r) => a + Number(r.amount), 0))} total. Pay each one by PayID from your banking app, check the name matches, then mark it paid.` : "Nothing to pay right now."}</p>` +
+      (data.length ? `<div class="col">${data.map(r => `<div class="answer-card"><div class="row" style="justify-content:space-between"><span><b>${esc(r.tutor ? r.tutor.full_name || r.tutor.display_name : "Tutor")}</b> <span class="muted">${esc(uniShort(r.tutor && r.tutor.uni_id))} · ${ago(r.created_at)}</span></span><span class="status-pill ${r.status === "paid" ? "approved" : r.status === "rejected" ? "rejected" : "pending"}">${r.status === "pending" ? "To pay" : r.status === "paid" ? "Paid" : "Rejected"}</span></div>
+        <dl class="kv"><dt>Amount</dt><dd><b>${money(Number(r.amount))}</b></dd><dt>PayID</dt><dd>${esc(r.payid)}</dd><dt>Name</dt><dd>${esc(r.payid_name)}</dd><dt>Reference</dt><dd>Distinction ${esc(r.id.slice(0, 8))}</dd></dl>
+        ${r.status === "pending" ? `<div class="row" style="justify-content:flex-end"><button class="btn sm" data-pay="${r.id}:0">Reject</button><button class="btn primary sm" data-pay="${r.id}:1">Mark as paid</button></div>` : ""}</div>`).join("")}</div>` : "");
+    body.onclick = async e => {
+      const b = e.target.closest("[data-pay]"); if (!b) return;
+      const [id, paid] = b.dataset.pay.split(":");
+      const go = async note => {
+        const { error } = await sb.rpc("admin_mark_payout", { p_id: id, p_paid: paid === "1", p_note: note });
+        if (error) return toast(errMsg(error));
+        closeModal(); toast(paid === "1" ? "Marked as paid" : "Request rejected. The amount is back in their balance."); adminPayouts();
+      };
+      if (paid === "1") return openModal(`<h3>Mark as paid?</h3><p class="muted" style="font-size:14px">Only do this once the PayID transfer has gone through.</p><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="pm-go">Mark as paid</button></div>`, m => { $("#pm-go", m).onclick = () => go(null); });
+      openModal(`<h3>Reject this withdrawal?</h3><label class="field"><span>Reason (shown to the tutor)</span><textarea class="prose" id="pm-note" maxlength="300" style="min-height:70px" placeholder="For example: the PayID name didn't match"></textarea></label><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="pm-go">Reject</button></div>`, m => { $("#pm-go", m).onclick = () => go($("#pm-note", m).value.trim() || null); });
+    };
   }
 
   async function adminAI() {

@@ -72,12 +72,17 @@ Run these in the Supabase SQL editor, in order (all safe to re-run):
 16. `supabase/migration_15_alerts_and_fast_claims.sql`: opt-in email alerts for tutors and a 2-minute answer window
 17. `supabase/migration_16_ai_checks.sql`: AI-writing checks on answers (flag over 40%, tutor warning, admin AI flags tab)
 18. `supabase/migration_17_ai_pause.sql`: tutoring pauses automatically after 3 AI flags in 30 days; admins can lift it
+19. `supabase/migration_18_payouts_and_stripe.sql`: tutor withdrawals ($20 minimum, paid by PayID) and Stripe card top-ups
 
 Add test credits to an account (until payments launch):
 
 ```sql
 select public.admin_grant_credits('someone@example.com', 20, 'Test credits');
 ```
+
+Payments:
+- `create-checkout` starts a Stripe Checkout for a credit pack; `stripe-webhook` adds the credits once Stripe confirms payment. Secrets: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`. Turn off "Verify JWT" for `stripe-webhook`. When card payments are live, switch off free top-ups: `update public.app_settings set value = 'false' where key = 'free_topups';`
+- `payout-request` records a tutor's withdrawal and emails the admins the PayID details (needs `RESEND_API_KEY`). Mark it paid in Admin → Payouts.
 
 The `notify-tutors` Edge Function emails tutors who turned on alerts when a question is posted. It needs a `RESEND_API_KEY` secret and a verified sending domain in Resend.
 
