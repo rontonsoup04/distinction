@@ -151,7 +151,7 @@
       <div class="hero-land">
         <div>
           <p class="tagline">Let's succeed as a generation.</p>
-          <h1>Ask about any course. Students with an <em>HD</em> answer.</h1>
+          <h1 class="rotor" id="rotor" data-notr></h1>
           <p class="fast"><span class="pulse" aria-hidden="true"></span>Receive an answer in a couple of minutes</p>
           <p class="muted" style="max-width:52ch;margin-top:12px">Pick your uni and course, ask a short question, and it goes to students who got a Distinction or High Distinction in that exact course, and in similar courses at other unis. Standard questions are usually answered within an hour. Urgent ones within 20 minutes.</p>
           <div class="cta-row"><a class="btn primary" href="#/signup">Sign up to ask</a><a class="btn" href="#/signup">Sign up to tutor</a><a class="btn ghost" href="#/login">Log in</a></div>
@@ -169,7 +169,31 @@
       </div>
       <div class="faq"><h2>Common questions</h2><details class="faq-item"><summary>How accurate and reliable are the answers?</summary><p>Every tutor got a Distinction (75+) or High Distinction (85+) in your course, or a very similar one, read straight from their transcript by our AI. You can choose HD only if you want the top scorers. Each answer shows the tutor's mark and rating, and you can get 2, 3 or 5 answers to compare. Tutors are students, so double-check anything important against your course materials.</p></details><details class="faq-item"><summary>Is it safe to hand in my transcript?</summary><p>Yes. Our AI only reads the course codes and marks. It's set up to ignore your name, student number, address and date of birth, and the file is deleted from our records as soon as it's read. Only your courses and marks are kept, and they're only shown next to your answers.</p></details><details class="faq-item"><summary>How fast will I get an answer?</summary><p>Tutors get 2 minutes to answer once they claim your question, so answers often arrive within minutes. Standard questions are usually answered within an hour. Tick Urgent and answers come within 20 minutes.</p></details><details class="faq-item"><summary>What does it cost, and what if nobody answers?</summary><p>Questions start at $3 for 2 answers. You only pay for answers you receive: when your question closes, any unanswered spots are refunded to your credits automatically. You can close a question early at any time.</p></details><details class="faq-item"><summary>Is this cheating?</summary><p>No. Distinction is for understanding: explaining a concept, spotting a mistake, or hearing how someone approached the course. Tutors won't write assessable work for you, and questions are capped at 50 words to keep them focused. Always follow your university's academic integrity rules.</p></details><details class="faq-item"><summary>How do you stop AI-written answers?</summary><p>Tutors have to type every answer themselves. Pasting is turned off, the question can't be copied, and they only get 2 minutes. Every answer is also checked for AI writing. Flagged answers are reviewed, and tutors with repeated flags are paused.</p></details><details class="faq-item"><summary>Who can become a tutor, and how do they get paid?</summary><p>Anyone with a D or HD in a course can tutor it. Upload your transcript and our AI approves you in about 20 seconds. Each answer takes about 2 to 3 minutes, so while you're answering that works out to roughly $22 to $51 an hour, with the top end from early bird bonuses. How much you make depends on how many questions come in for your courses, so turn on email alerts to catch them. Earnings are tracked from your first answer, and payouts to your bank account are being set up.</p></details><details class="faq-item"><summary>What is My eQuals?</summary><p>My eQuals is the official digital transcript service used by Australian and New Zealand universities. Your uni issues your transcript there, so it can't be edited. Tutors can share a My eQuals link on their profile, and once we've checked it they get a <b>✓ My eQuals</b> checkmark, so students know their marks are verified by the university itself. It's optional. You can get a link by ordering an official transcript from your uni (at UNSW it's $20 and takes up to 5 working days), then choosing Share in My eQuals.</p></details><details class="faq-item"><summary>Can I ask in another language?</summary><p>Yes. Choose your language in your profile and the whole site switches to it. Questions and answers written in other languages are translated for you automatically, with a Show original button.</p></details></div>
     </section>`;
-    paintDemo();
+    paintDemo(); startRotor();
+  }
+
+  // Homepage headlines: cycle every few seconds. Hand-written Mandarin; other languages use the automatic translator.
+  const HEADLINES = [
+    ["Ask about any course. Students with an <em>HD</em> answer.", "任何课程都能问。<em>HD</em> 学长学姐来回答。"],
+    ["ChatGPT and Claude answer from the whole internet. Our tutors <em>aced your course</em>.", "ChatGPT 和 Claude 的答案来自整个互联网。我们的导师<em>在你的课程拿过高分</em>。"],
+    ["Stuck at 11pm? An <em>HD student</em> answers in minutes.", "深夜卡住了？<em>HD 学生</em>几分钟内回复你。"],
+    ["Learn from the students who <em>topped your course</em>.", "向<em>在你的课程拿到最高分</em>的同学请教。"],
+    ["Not a generic answer. One from someone who <em>sat your exam</em>.", "不是泛泛的答案，而是来自<em>考过同一门考试</em>的人。"]
+  ];
+  function startRotor() {
+    const el = $("#rotor"); if (!el) return;
+    const lang = window.I18N ? I18N.lang : "English", zh = lang === "Mandarin (Simplified Chinese)";
+    const own = lang === "English" || zh;
+    if (!own) el.removeAttribute("data-notr");
+    el.innerHTML = HEADLINES.map((h, i) => `<span class="rot${i ? "" : " on"}"${i ? ' aria-hidden="true"' : ""}>${own ? h[zh ? 1 : 0] : h[0].replace(/<\/?em>/g, "")}</span>`).join("");
+    if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let i = 0;
+    every(4500, () => {
+      const items = el.querySelectorAll(".rot"); if (!items.length) return;
+      items[i].classList.remove("on"); items[i].setAttribute("aria-hidden", "true");
+      i = (i + 1) % items.length;
+      items[i].classList.add("on"); items[i].removeAttribute("aria-hidden");
+    });
   }
 
   // Homepage example: a question only someone who did the course can answer. Pre-translated for Mandarin.

@@ -587,3 +587,9 @@ fieldset.goals legend small{font-weight:400;margin-left:4px}
 .lang-btn .on{color:var(--ink);font-weight:700}
 .lang-btn .sep{opacity:.5}
 .lang-btn svg{margin-right:2px}
+
+/* Rotating homepage headline: every line sits in the same grid cell, so the layout never jumps */
+.rotor{display:grid}
+.rotor .rot{grid-area:1/1;opacity:0;transform:translateY(8px);transition:opacity .5s ease,transform .5s ease;pointer-events:none}
+.rotor .rot.on{opacity:1;transform:none;pointer-events:auto}
+@media (prefers-reduced-motion:reduce){.rotor .rot{transition:none}}
