@@ -5,7 +5,7 @@
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit" } });
   window.sb = sb;
 
-  const WORD_LIMIT = 50, MAX_FILE = 5 * 1024 * 1024, CLAIM_MIN = 10, URGENT_MIN = 20, PAY = 1.10, URGENT_PAY = 1.70;
+  const WORD_LIMIT = 50, MAX_FILE = 5 * 1024 * 1024, CLAIM_MIN = 2, URGENT_MIN = 20, PAY = 1.10, URGENT_PAY = 1.70;
   const FILE_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
   const YEARS = ["1st year", "2nd year", "3rd year", "4th year", "5th year or later", "Postgraduate"];
   const DURS = [{ value: "1", label: "1 hour" }, { value: "3", label: "3 hours" }, { value: "6", label: "6 hours" }, { value: "12", label: "12 hours" }, { value: "24", label: "1 day", sub: "Most answers" }];
@@ -91,6 +91,7 @@
 
   const app = () => $("#app");
   function clearTimers() { S.timers.forEach(clearInterval); S.timers = []; }
+  const clock = ms => { const t = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
   function every(ms, fn) { S.timers.push(setInterval(fn, ms)); }
   const refreshBtn = id => `<button type="button" class="btn ghost sm refresh" id="${id}" aria-label="Refresh"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Refresh</span></button>`;
   function wireRefresh(id, fn) {
@@ -100,7 +101,7 @@
   }
 
   /* ---------------- router ---------------- */
-  const PUBLIC = ["", "login", "signup", "reset", "new-password"];
+  const PUBLIC = ["", "login", "signup", "reset", "new-password", "alerts-off"];
   async function route() {
     if (!S.ready) return;
     clearTimers(); closeModal(); $("#menu").hidden = true;
@@ -128,6 +129,7 @@
         case "answer": return await pageAnswer(parts[1]);
         case "admin": return await pageAdmin();
         case "credits": return await pageCredits();
+        case "alerts-off": return await pageAlertsOff(parts[1], parts[2]);
         default: app().innerHTML = `<div class="empty">Page not found. <a href="#/">Go home</a></div>`;
       }
     } catch (e) { console.error(e); app().innerHTML = `<div class="status err">${esc(errMsg(e))}</div>`; }
@@ -154,7 +156,7 @@
       </div>
       <div class="two-up">
         <div class="panel feature"><span class="eyebrow">For students</span><h2>Answers from people who aced your course</h2><ul><li>Pick your uni and course from 40 Australian universities</li><li>50-word questions with one PDF or image</li><li>Every tutor with a D or HD in your course, or a similar one, can see and claim it</li><li>Get 2, 3 or 5 answers. Rate each one.</li></ul><a class="btn primary" href="#/signup" style="align-self:flex-start">Sign up as a student</a></div>
-        <div class="panel feature"><span class="eyebrow">For tutors</span><h2>Earn up to $34 an hour from your phone</h2><ul><li>Upload your transcript. We read it and approve your D and HD courses. Add My eQuals for a verified checkmark.</li><li>Claim a question, then answer with text and by drawing on the student's document</li><li>$1.10 per answer, $1.70 for urgent questions answered within 20 minutes</li></ul><p class="muted" style="font-size:13px">Create a free account first, then apply to tutor from your account.</p><a class="btn" href="#/signup" style="align-self:flex-start">Create an account</a></div>
+        <div class="panel feature"><span class="eyebrow">For tutors</span><h2>Earn $1 to $2 for every 3-minute answer</h2><ul><li>Upload your transcript. We read it and approve your D and HD courses. Add My eQuals for a verified checkmark.</li><li>Claim a question, then answer with text and by drawing on the student's document</li><li>$1.10 per answer, or $1.70 as an early bird when you answer within 20 minutes of the question being posted</li></ul><p class="muted" style="font-size:13px">Create a free account first, then apply to tutor from your account.</p><a class="btn" href="#/signup" style="align-self:flex-start">Create an account</a></div>
       </div>
     </section>`;
   }
@@ -349,7 +351,7 @@
         <p class="muted">You can now ask questions about any course. Questions are paid with credits, starting at $3 for 2 answers.</p>
         <a class="btn primary" href="#/ask">Ask a question</a></div>`;
       $("#body").insertAdjacentHTML("afterend", `<div class="panel" style="gap:10px"><span class="eyebrow">Optional</span><h2 style="font-size:22px">Got a D or HD in a course? Earn by tutoring it.</h2>
-        <p class="muted" style="font-size:14px">Answer short questions from students in the courses you aced. $1.10 per answer, or $1.70 for urgent ones answered within 20 minutes. Upload your transcript to apply. It takes about 3 minutes.</p>
+        <p class="muted" style="font-size:14px">Answer short questions from students in the courses you aced. Earn $1 to $2 for every 3-minute answer. Upload your transcript and our AI approves you in about 20 seconds.</p>
         <div class="row"><a class="btn" href="#/tutor/apply">Apply to tutor</a><a class="btn ghost" href="#/ask">Maybe later</a></div></div>`);
       window.scrollTo(0, 0);
     }
@@ -386,7 +388,7 @@
             <div><span class="stepno">2 · CHOOSE</span><b>Who answers</b><p>Everyone who got a D or HD in that course or a similar one, or HD only if you prefer.</p></div>
             <div><span class="stepno">3 · GET</span><b>Answers</b><p>Tutors reply in short messages and can mark up your PDF or image directly.</p></div>
           </div>
-          <a class="recruit" href="#/tutor"><span><b>Got an HD?</b> Earn up to $34 an hour answering quick questions in the courses you aced.</span><span class="recruit-go">Start earning →</span></a>
+          <a class="recruit" href="#/tutor"><span><b>Got an HD?</b> Earn $1 to $2 for every 3-minute answer in the courses you aced.</span><span class="recruit-go">Start earning →</span></a>
         </div>
         <form class="panel composer" id="compose" novalidate>
           <div class="two tight">
@@ -497,6 +499,7 @@
         const { data, error } = await sb.from("questions").insert(row).select("id").single();
         if (error) throw error;
         await refreshCredits();
+        sb.functions.invoke("notify-tutors", { body: { question_id: data.id } }).catch(() => { });
         toast(`Question posted. ${money(cost)} used from your credits.`);
         location.hash = "#/q/" + data.id;
       } catch (err) { status(st, errMsg(err), "err"); btn.disabled = false; }
@@ -757,6 +760,28 @@
     });
   }
 
+  /* One-click unsubscribe from an alert email */
+  async function pageAlertsOff(uid, token) {
+    app().innerHTML = `<div class="boot">Turning off email alerts…</div>`;
+    const { data, error } = await sb.rpc("unsubscribe_alerts", { p_user: uid, p_token: token });
+    if (S.user && S.user.id === uid && data) await loadProfile();
+    app().innerHTML = `<div class="medium"><div class="panel pending-card">${!error && data
+      ? `<span class="status-pill approved">Done</span><h1 style="font-size:26px">Email alerts are off</h1><p class="muted">You won't get emails about new questions any more. You can turn them back on from your tutor profile whenever you like.</p>`
+      : `<span class="status-pill rejected">Link didn't work</span><h1 style="font-size:26px">We couldn't turn off alerts from this link</h1><p class="muted">Log in and switch off email alerts on your tutor profile instead.</p>`}
+      <a class="btn" href="#/tutor">Go to tutor profile</a></div></div>`;
+  }
+
+  /* Ask tutors (once) whether they want emails about new questions */
+  function askAlerts() {
+    openModal(`<h3>Get an email when a question comes in?</h3>
+      <p class="muted" style="font-size:14px">We'll email ${esc(S.user.email)} when a student asks a question in one of your courses, so you don't have to keep checking the site. First to claim gets the spot. At most one email every few minutes, and you can turn this off anytime.</p>
+      <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="al-no">Not now</button><button class="btn primary" id="al-yes">Yes, email me</button></div>`, m => {
+      const set = async on => { try { await saveProfile({ email_alerts: on, alerts_asked: true, email_alerts_at: on ? new Date().toISOString() : null }); closeModal(); toast(on ? "Email alerts are on" : "No problem. You can turn alerts on from your tutor profile."); if ($("#al-toggle")) $("#al-toggle").checked = on; } catch (e) { toast(errMsg(e)); } };
+      $("#al-yes", m).onclick = () => set(true);
+      $("#al-no", m).onclick = () => set(false);
+    });
+  }
+
   /* ---------------- tutor ---------------- */
   async function pageTutor() {
     const p = S.profile;
@@ -767,8 +792,8 @@
   }
   function tutorPitch() {
     app().innerHTML = `<section class="view"><div class="intro"><div>
-      <h1>Turn your best marks into up to $34 an hour.</h1>
-      <p>Upload your transcript and our AI reads your marks in about 20 seconds. Every course where you got a Distinction (75+) or High Distinction becomes a course you can tutor, straight away. Then answer short questions from students for $1.10 each, or $1.70 for urgent questions answered within 20 minutes. Most take about 3 minutes.</p>
+      <h1>Earn $1 to $2 for every 3-minute answer.</h1>
+      <p>Upload your transcript and our AI reads your marks in about 20 seconds. Every course where you got a Distinction (75+) or High Distinction becomes a course you can tutor, straight away. Then answer short questions from students for $1.10 each, or $1.70 as an early bird. Turn on email alerts and answer between classes.</p>
       <div class="cta-row"><a class="btn primary" href="#/tutor/apply">Apply to tutor</a></div></div>
       <div class="how"><div><span class="stepno">STEP 1</span><b>Profile</b><p>Your uni, degree and a short intro.</p></div><div><span class="stepno">STEP 2</span><b>Transcript</b><p>Upload it. AI reads your courses and marks, then the file is deleted.</p></div><div><span class="stepno">STEP 3</span><b>Start tutoring</b><p>Approved instantly for every course at 75 or above.</p></div></div>
     </div></section>`;
@@ -803,9 +828,12 @@
             <div style="min-width:0"><h2 style="font-size:22px" data-notr>${esc(displayName(p))}</h2><div class="t-meta">${esc(uniName(p.uni_id))}</div><div class="t-meta">${esc(p.degree || "")}</div>
             ${p.equals_verified ? '<div class="verified">✓ Verified with My eQuals</div>' : '<div class="verified" style="color:var(--muted)">Transcript checked</div>'}</div></div>
           <div class="rating-row"><span class="rating-big">${s.reviews_count ? Number(s.rating).toFixed(1) : "New"}</span><div>${stars(Number(s.rating || 0), 20)}<div class="muted" style="font-size:13px">${s.reviews_count || 0} review${s.reviews_count === 1 ? "" : "s"}</div></div></div>
-          <div class="stats"><div><b>${s.answers_count || 0}</b><span>Answers</span></div><div><b>${money(Number(s.earned || 0))}</b><span>Earned</span></div><div><b>${s.answers_count ? Math.round((s.urgent_count || 0) / s.answers_count * 100) + "%" : "—"}</b><span>Urgent</span></div></div>
+          <div class="stats"><div><b>${s.answers_count || 0}</b><span>Answers</span></div><div><b>${money(Number(s.earned || 0))}</b><span>Earned</span></div><div><b>${s.answers_count ? Math.round((s.urgent_count || 0) / s.answers_count * 100) + "%" : "—"}</b><span>Early bird</span></div></div>
           ${p.bio ? `<p style="font-size:14px">${esc(p.bio)}</p>` : `<a href="#/profile">Add a short intro</a>`}
         </div>
+        <div class="panel" style="gap:8px"><h3 style="font-size:18px">Question alerts</h3>
+          <label class="check"><input type="checkbox" id="al-toggle" ${p.email_alerts ? "checked" : ""}><span>Email me at <b>${esc(S.user.email)}</b> when a question comes in for my courses</span></label>
+          <small class="muted">Be first to claim it. At most one email every few minutes.</small></div>
         ${p.equals_verified ? "" : `<div class="panel" style="gap:10px"><h3 style="font-size:18px">Get the ✓ My eQuals checkmark</h3>
           <p class="muted" style="font-size:14px">${p.myequals_link ? "Thanks. We're checking your link and will add the checkmark once it matches your transcript." : "Share your transcript from My eQuals and paste the link. Verified tutors stand out to students."}</p>
           <div class="row"><input type="url" id="eq-link" value="${esc(p.myequals_link || "")}" placeholder="https://www.myequals.edu.au/…" style="flex:1;min-width:180px"><button class="btn sm" id="eq-save">${p.myequals_link ? "Update" : "Save link"}</button></div>
@@ -819,12 +847,14 @@
       </aside>
       <div class="col">
         <div class="earn-strip"><div><div class="eyebrow" style="color:inherit;opacity:.7">Earned so far</div><div class="earn-amt">${money(Number(s.earned || 0))}</div></div>
-          <div class="earn-rules"><span><b>$1.10</b> per answer</span><span class="ebr"><b>$1.70</b> urgent questions answered within 20 min</span><span>Payouts start when payments launch. Your earnings are tracked from today.</span></div></div>
-        <div class="pitch"><div class="pitch-main"><span class="eyebrow">Your earning potential</span><div class="pitch-big">Up to <b>$34</b> an hour</div><p>Questions are 50 words or less, so most answers take about 3 minutes. Answer 20 urgent questions an hour at $1.70 each, from your phone, between classes.</p><div class="pitch-now">This week: <b>${s.week_count || 0}</b> answer${s.week_count === 1 ? "" : "s"}</div></div>
+          <div class="earn-rules"><span><b>$1.10</b> per answer</span><span class="ebr"><b>$1.70</b> early bird, on marked questions answered within 20 min</span><span>Payouts start when payments launch. Your earnings are tracked from today.</span></div></div>
+        <div class="pitch"><div class="pitch-main"><span class="eyebrow">Your earning potential</span><div class="pitch-big"><b>$1–2</b> every 3 minutes</div><p>Questions are 50 words or less, and you get 2 minutes to answer once you claim one. Look for the early bird tag to earn $1.70. Turn on email alerts and answer from your phone between classes.</p><div class="pitch-now">This week: <b>${s.week_count || 0}</b> answer${s.week_count === 1 ? "" : "s"}</div></div>
           <div class="goals"><div class="goal"><div class="row" style="justify-content:space-between"><b>Weekly goal</b><span class="mono">${Math.min(20, s.week_count || 0)}/20</span></div><div class="meter"><i style="width:${Math.min(100, (s.week_count || 0) * 5)}%"></i></div><small>Answer 20 questions this week to hit your goal.</small></div></div></div>
         <div class="results-head"><h2>Pending questions</h2><span class="muted" style="font-size:13px">You can hold one question at a time</span></div>
         <div class="col" id="feed"><div class="boot" style="min-height:80px">Loading questions…</div></div>
       </div></div>`;
+    $("#al-toggle").onchange = async e => { const on = e.target.checked; try { await saveProfile({ email_alerts: on, alerts_asked: true, email_alerts_at: on ? new Date().toISOString() : null }); toast(on ? "Email alerts are on" : "Email alerts are off"); } catch (err) { e.target.checked = !on; toast(errMsg(err)); } };
+    if (!p.alerts_asked) setTimeout(askAlerts, 600);
     const eqSave = $("#eq-save");
     if (eqSave) eqSave.onclick = async () => {
       const link = $("#eq-link").value.trim();
@@ -862,17 +892,17 @@
     const spots = q.slots - q.answer_count - q.held_by_others;
     const similar = q.match_code && (q.match_uni !== q.uni_id || q.match_code !== q.course_code);
     let action;
-    if (answered) action = `<div class="elig yes">✓ You answered ${["1st", "2nd", "3rd", "4th", "5th"][q.my_position - 1]} · ${money(Number(q.my_payout))}${Number(q.my_payout) > PAY ? " (urgent rate)" : ""}</div>`;
+    if (answered) action = `<div class="elig yes">✓ You answered ${["1st", "2nd", "3rd", "4th", "5th"][q.my_position - 1]} · ${money(Number(q.my_payout))}${Number(q.my_payout) > PAY ? " (early bird)" : ""}</div>`;
     else if (new Date(q.expires_at) <= now) action = `<div class="muted" style="font-size:13px">This question has closed.</div>`;
-    else if (claimed) action = `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">Held for you · ${mins(new Date(q.my_claim_expires) - now)} min left</span><a class="btn primary sm" href="#/answer/${q.id}">Continue answering</a></div>`;
+    else if (claimed) action = `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">Held for you · ${clock(new Date(q.my_claim_expires) - now)} left</span><a class="btn primary sm" href="#/answer/${q.id}">Continue answering</a></div>`;
     else if (full) action = `<div class="muted" style="font-size:13px">All ${q.slots} spots have been answered.</div>`;
     else if (spots <= 0) action = `<div class="muted" style="font-size:13px">All remaining spots are held by other tutors. Check back in a few minutes.</div>`;
-    else action = `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">${holding ? `Finish or release your <span class="mono">${esc(holding.course_code)}</span> question to claim this one` : `${spots} of ${q.slots} spot${q.slots > 1 ? "s" : ""} left`}</span><button class="btn primary sm" data-claim="${q.id}" ${holding ? "disabled" : ""}>Claim to answer</button></div>`;
+    else action = `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">${holding ? `Finish or release your <span class="mono">${esc(holding.course_code)}</span> question to claim this one` : `${spots} of ${q.slots} spot${q.slots > 1 ? "s" : ""} left`}</span><button class="btn primary sm" data-claim="${q.id}" ${holding ? "disabled" : ""}>Claim · 2 min to answer</button></div>`;
     return `<article class="q tq${answered || full ? " done" : ""}" data-trg>
       <div class="tq-head"><div class="avatar sm" aria-hidden="true">${esc(initials(q.asker_name))}</div>
         <div style="min-width:0;flex:1"><b data-notr>${esc(q.asker_name)}</b><div class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</div></div>
-        <div class="reward-box${eb ? " eb" : ""}">${eb ? `<span class="eb-tag">Urgent</span><b>${money(URGENT_PAY)}</b><small>${mins(ebEnd - now)} min left, then ${money(PAY)}</small>` : `<b>${money(PAY)}</b><small>Reward</small>`}</div></div>
-      <div class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="muted" style="font-size:13px">${esc(q.course_title)}</span>${similar ? `<span class="simchip">Similar to your ${esc(q.match_code)}</span>` : ""}${q.min_mark >= 85 ? '<span class="tagchip">HD only</span>' : ""}${q.verified_only ? '<span class="tagchip">Verified only</span>' : ""}</div>
+        <div class="reward-box${eb ? " eb" : ""}">${eb ? `<span class="eb-tag">Early bird</span><b>${money(URGENT_PAY)}</b><small>${mins(ebEnd - now)} min left, then ${money(PAY)}</small>` : `<b>${money(PAY)}</b><small>Reward</small>`}</div></div>
+      <div class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="muted" style="font-size:13px">${esc(q.course_title)}</span>${similar ? `<span class="simchip">Similar to your ${esc(q.match_code)}</span>` : ""}</div>
       ${(q.goals || []).length ? `<div class="goals-row"><span class="muted">After</span>${goalChips(q.goals)}</div>` : ""}
       <div data-trslot><p class="q-text" data-tr>${esc(q.body)}</p></div>
       ${q.attachment_name ? `<span class="fchip">${q.attachment_type === "application/pdf" ? "PDF" : "IMG"} · ${esc(q.attachment_name)} · ${kb(q.attachment_size || 0)}</span>` : ""}
@@ -909,8 +939,8 @@
             ${(q.goals || []).length ? `<div class="goals-row"><span class="muted">The student is after</span>${goalChips(q.goals)}</div>` : ""}
           </article>
           <div class="panel" style="gap:12px">
-            <div class="row" style="justify-content:space-between"><h3 style="font-size:18px">Your answer</h3><span class="muted" style="font-size:13px" id="claim-state"></span></div>
-            <p class="muted" style="font-size:13px">Explain it in short messages, in your own words. Pasting is limited to short snippets, and files can't be attached, so answers stay original.</p>
+            <div class="row" style="justify-content:space-between"><h3 style="font-size:18px">Your answer</h3><span class="claim-clock" id="claim-state"></span></div>
+            <p class="muted" style="font-size:13px">You have <b>2 minutes</b> from claiming. Keep it short and in your own words: pasting is limited to short snippets and files can't be attached, so answers stay original.</p>
             <div class="composer-bubbles" id="bubbles"></div>
             <div class="row" style="justify-content:space-between"><button class="btn sm" id="add-b">+ Add another message</button><span class="counter" id="total"></span></div>
             <div id="st" hidden></div>
@@ -927,12 +957,14 @@
     }
     function paintClaim() {
       const el = $("#claim-state"); if (!el) return;
-      el.textContent = claimUntil && claimUntil > new Date() ? `Held for you · ${mins(claimUntil - Date.now())} min left` : "Hold expired. Submitting will still work if a spot is free.";
-      $("#reward").innerHTML = eb() ? `<span class="eb-tag">Urgent</span><b>${money(URGENT_PAY)}</b><small>${mins(new Date(q.created_at).getTime() + URGENT_MIN * 60e3 - Date.now())} min left, then ${money(PAY)}</small>` : `<b>${money(PAY)}</b><small>Reward</small>`;
+      const leftMs = claimUntil ? claimUntil - Date.now() : 0;
+      el.className = "claim-clock" + (leftMs > 0 && leftMs < 30e3 ? " low" : "") + (leftMs <= 0 ? " over" : "");
+      el.textContent = leftMs > 0 ? `${clock(leftMs)} left to answer` : "Time's up. Submitting still works if a spot is free.";
+      $("#reward").innerHTML = eb() ? `<span class="eb-tag">Early bird</span><b>${money(URGENT_PAY)}</b><small>${mins(new Date(q.created_at).getTime() + URGENT_MIN * 60e3 - Date.now())} min left, then ${money(PAY)}</small>` : `<b>${money(PAY)}</b><small>Reward</small>`;
     }
     const qa = app().querySelector("article.q"); if (qa) { qa.setAttribute("data-trg", ""); autoTranslate(app()); }
     await ensureClaim(); paintClaim();
-    every(15000, paintClaim);
+    every(1000, paintClaim);
 
     function renderBubbles() {
       $("#bubbles").innerHTML = d.bubbles.map((b, i) => `<div class="b-row"><textarea class="prose" data-b="${i}" maxlength="800" placeholder="${i === 0 ? "Start with the key idea…" : "Add more detail…"}" aria-label="Message ${i + 1}">${esc(b)}</textarea>${d.bubbles.length > 1 ? `<button class="btn ghost sm" data-rm="${i}" aria-label="Remove message ${i + 1}">×</button>` : ""}</div>`).join("");

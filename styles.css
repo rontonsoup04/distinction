@@ -562,3 +562,6 @@ fieldset.goals legend small{font-weight:400;margin-left:4px}
 @media (max-width:520px){.scan{flex-direction:column;align-items:stretch}.scan-doc{align-self:center}}
 @media (prefers-reduced-motion:reduce){.scan-beam,.scan-steps li.active::before{animation:none}}
 .ai-note.privacy{background:var(--surface-2);border-color:var(--line)}
+.claim-clock{font-family:var(--mono);font-size:13px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--surface-2);color:var(--ink)}
+.claim-clock.low{background:color-mix(in srgb,#d9534f 18%,var(--surface));color:#b3261e}
+.claim-clock.over{font-family:var(--body);font-weight:500;color:var(--muted)}

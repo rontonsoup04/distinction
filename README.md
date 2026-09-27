@@ -69,12 +69,15 @@ Run these in the Supabase SQL editor, in order (all safe to re-run):
 13. `supabase/migration_12_hd_fee.sql`: HD only adds $0.50 per answer
 14. `supabase/migration_13_ensure_profile.sql`: repairs a signed-in account whose profile row is missing
 15. `supabase/migration_14_auto_approve.sql`: tutors are approved instantly from the AI scan; names aren't kept; the same transcript (identical courses and marks) can't be used by two accounts
+16. `supabase/migration_15_alerts_and_fast_claims.sql`: opt-in email alerts for tutors and a 2-minute answer window
 
 Add test credits to an account (until payments launch):
 
 ```sql
 select public.admin_grant_credits('someone@example.com', 20, 'Test credits');
 ```
+
+The `notify-tutors` Edge Function emails tutors who turned on alerts when a question is posted. It needs a `RESEND_API_KEY` secret and a verified sending domain in Resend.
 
 The `scan-transcript` Edge Function (`supabase/functions/scan-transcript`) reads transcripts with Claude. It needs an `ANTHROPIC_API_KEY` secret in Supabase.
 
