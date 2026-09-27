@@ -1,6 +1,8 @@
 // Supabase Edge Function: create-checkout
 // Starts a Stripe Checkout payment for a credit pack. Credits are added only by stripe-webhook,
 // after Stripe confirms the payment, so nothing here can be faked from the browser.
+// Everyone pays with the live key (STRIPE_SECRET_KEY). Admins use the test key (STRIPE_TEST_SECRET_KEY)
+// when it's set, so they can try the flow with Stripe's test card 4242 4242 4242 4242.
 import Stripe from "https://esm.sh/stripe@14.25.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -20,14 +22,16 @@ const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: 
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
-  const key = Deno.env.get("STRIPE_SECRET_KEY");
-  if (!key) return json({ error: "not_configured" }, 503);
-
   const userClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
     global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
   });
   const { data: { user } } = await userClient.auth.getUser();
   if (!user) return json({ error: "Sign in first." }, 401);
+  const { data: me } = await userClient.from("profiles").select("is_admin").eq("id", user.id).single();
+  const testKey = Deno.env.get("STRIPE_TEST_SECRET_KEY");
+  const test = !!(me?.is_admin && testKey);
+  const key = test ? testKey : Deno.env.get("STRIPE_SECRET_KEY");
+  if (!key) return json({ error: "not_configured" }, 503);
 
   let pack = "";
   try { ({ pack } = await req.json()); } catch { /* checked below */ }
@@ -45,5 +49,5 @@ Deno.serve(async (req) => {
     success_url: `${SITE}/#/credits/paid`,
     cancel_url: `${SITE}/#/credits/cancelled`,
   });
-  return json({ url: session.url });
+  return json({ url: session.url, test: test || key.startsWith("sk_test_") });
 });

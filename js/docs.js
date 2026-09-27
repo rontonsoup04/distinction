@@ -108,7 +108,7 @@
       let cur = null;
       const pos = e => { const r = p.ink.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))]; };
       p.el.addEventListener("pointerdown", e => {
-        if (e.button !== 0) return;
+        if (e.button !== 0 || tool === "none") return;
         if (tool === "note") {
           if (e.target.closest(".note")) return;
           const [x, y] = pos(e);

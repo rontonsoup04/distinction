@@ -1,24 +1,24 @@
 // Supabase Edge Function: stripe-webhook
 // Stripe calls this after a Checkout payment. It checks Stripe's signature, then adds the credits once.
 // Turn OFF "Verify JWT" for this function: Stripe doesn't send a Supabase login token.
+// Accepts events from the live endpoint (STRIPE_WEBHOOK_SECRET) and the test endpoint (STRIPE_TEST_WEBHOOK_SECRET).
 import Stripe from "https://esm.sh/stripe@14.25.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const PACKS: Record<string, number> = { "10": 10, "21": 20, "55": 50 };
 
 Deno.serve(async (req) => {
-  const key = Deno.env.get("STRIPE_SECRET_KEY"), secret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
-  if (!key || !secret) return new Response("Not configured", { status: 503 });
+  const key = Deno.env.get("STRIPE_SECRET_KEY") ?? Deno.env.get("STRIPE_TEST_SECRET_KEY");
+  const secrets = [Deno.env.get("STRIPE_WEBHOOK_SECRET"), Deno.env.get("STRIPE_TEST_WEBHOOK_SECRET")].filter(Boolean) as string[];
+  if (!key || !secrets.length) return new Response("Not configured", { status: 503 });
   const stripe = new Stripe(key, { apiVersion: "2024-06-20", httpClient: Stripe.createFetchHttpClient() });
 
-  const body = await req.text();
-  let event: Stripe.Event;
-  try {
-    event = await stripe.webhooks.constructEventAsync(body, req.headers.get("stripe-signature") ?? "", secret, undefined, Stripe.createSubtleCryptoProvider());
-  } catch (e) {
-    console.error("Bad signature", e);
-    return new Response("Bad signature", { status: 400 });
+  const body = await req.text(), sig = req.headers.get("stripe-signature") ?? "";
+  let event: Stripe.Event | null = null;
+  for (const secret of secrets) {
+    try { event = await stripe.webhooks.constructEventAsync(body, sig, secret, undefined, Stripe.createSubtleCryptoProvider()); break; } catch { /* try the next secret */ }
   }
+  if (!event) { console.error("Bad signature"); return new Response("Bad signature", { status: 400 }); }
 
   if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
     const s = event.data.object as Stripe.Checkout.Session;

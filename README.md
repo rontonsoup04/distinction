@@ -74,6 +74,7 @@ Run these in the Supabase SQL editor, in order (all safe to re-run):
 18. `supabase/migration_17_ai_pause.sql`: tutoring pauses automatically after 3 AI flags in 30 days; admins can lift it
 19. `supabase/migration_18_payouts_and_stripe.sql`: tutor withdrawals ($20 minimum, paid by PayID) and Stripe card top-ups
 20. `supabase/migration_19_widen_reach.sql`: questions that would reach fewer than 10 tutors are widened to related courses (same subject prefix)
+21. `supabase/migration_20_review_and_history.sql`: 3-minute hold (2 to write, 1 to review), and `my_answers()` for tutors' answer history
 
 Add test credits to an account (until payments launch):
 
@@ -82,7 +83,7 @@ select public.admin_grant_credits('someone@example.com', 20, 'Test credits');
 ```
 
 Payments:
-- `create-checkout` starts a Stripe Checkout for a credit pack; `stripe-webhook` adds the credits once Stripe confirms payment. Secrets: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`. Turn off "Verify JWT" for `stripe-webhook`. When card payments are live, switch off free top-ups: `update public.app_settings set value = 'false' where key = 'free_topups';`
+- `create-checkout` starts a Stripe Checkout for a credit pack; `stripe-webhook` adds the credits once Stripe confirms payment. Secrets: `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` (live), plus `STRIPE_TEST_SECRET_KEY` and `STRIPE_TEST_WEBHOOK_SECRET` (test mode, used for admins so they can pay with 4242 4242 4242 4242). Turn off "Verify JWT" for `stripe-webhook`. When card payments are live, switch off free top-ups: `update public.app_settings set value = 'false' where key = 'free_topups';`
 - `payout-request` records a tutor's withdrawal and emails the admins the PayID details (needs `RESEND_API_KEY`). Mark it paid in Admin → Payouts.
 
 The `notify-tutors` Edge Function emails tutors who turned on alerts when a question is posted. It needs a `RESEND_API_KEY` secret and a verified sending domain in Resend.

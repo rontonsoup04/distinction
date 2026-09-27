@@ -593,3 +593,9 @@ fieldset.goals legend small{font-weight:400;margin-left:4px}
 .rotor .rot{grid-area:1/1;opacity:0;transform:translateY(8px);transition:opacity .5s ease,transform .5s ease;pointer-events:none}
 .rotor .rot.on{opacity:1;transform:none;pointer-events:auto}
 @media (prefers-reduced-motion:reduce){.rotor .rot{transition:none}}
+.review-bubbles{max-height:40vh;overflow:auto;padding:4px 2px}
+.page.mode-none{cursor:default}
+.my-answers-link{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);text-decoration:none;color:var(--ink);font-size:14px}
+.my-answers-link:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.my-answers-link>span:last-child{color:var(--accent);font-weight:600}
+.review-line{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
