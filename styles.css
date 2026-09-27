@@ -578,3 +578,5 @@ fieldset.goals legend small{font-weight:400;margin-left:4px}
 .faq-item[open] summary::after{transform:translateY(-50%) rotate(45deg)}
 .faq-item p{margin:0 0 14px;font-size:14px;line-height:1.6;color:var(--muted)}
 .faq-item summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.tutor-tips{border:1px solid color-mix(in srgb,var(--accent) 28%,var(--line));background:color-mix(in srgb,var(--accent) 7%,var(--surface));border-radius:12px;padding:12px 14px;font-size:14px}
+.tutor-tips ul{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
