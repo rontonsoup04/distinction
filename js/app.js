@@ -429,7 +429,7 @@
         <div class="pc-tags"><span class="q-code" data-notr>${esc(p.course_code)}</span><span class="tagchip" data-notr>${esc(uniShort(p.uni_id))}</span>${done ? '<span class="best-chip">✓ Answered</span>' : ""}${p.removed ? '<span class="status-pill rejected">Removed</span>' : ""}</div>
         <h3 class="pc-title" data-tr>${esc(p.title)}</h3>
         <p class="pc-snip" data-tr>${esc(snippet(p.body, 180))}</p>
-        <div class="pc-meta"><span data-notr>${esc(p.author_name || "Student")}</span> · ${ago(p.created_at)} · <span class="sr-only">${plural(p.score, "vote")}, ${plural(p.reply_count, "answer")}</span></div>
+        <div class="pc-meta"><span data-notr>${esc(p.author_name || "Student")}</span> · ${ago(p.created_at)}<span class="sr-only">, ${plural(p.score, "vote")}, ${plural(p.reply_count, "answer")}</span></div>
       </div></a>`;
   }
 
