@@ -2,36 +2,28 @@
 
 **Let's succeed as a generation.**
 
-Distinction is a peer Q&A marketplace for Australian university students. Pick your uni and course, ask a short question, and it goes to students who got a Distinction or High Distinction in that course (and in similar courses at other unis). Tutors answer in short text messages and by marking up the student's own PDF or image.
+Distinction is a free, public Q&A forum for Australian university students. Students post questions about a course at their uni, anyone with an account can answer, and everyone can browse and search questions by university and course.
 
-Live site: https://distinction.onrender.com
+Live site: https://hdistinction.live
 
 ## What's built
 
+**Forum**
+- Anyone can read. Filter by university and course, search the text, and sort by newest, active, top or unanswered
+- Signed-in students post a question (title plus details) tagged with a uni and course code; any course code can be typed and is added to the catalogue
+- Anyone signed in can answer, upvote questions and answers (not their own), and report problems
+- The asker can mark the best answer; authors can edit or delete their own posts
+- Rules against posting questions from open assessments are shown when posting, and "From an open assessment" is a report reason
+- Rate limits: 8 questions and 30 answers per person per hour
+- Posts in other languages are translated automatically for signed-in users; the whole interface switches between English and Mandarin
+
 **Accounts (Supabase Auth)**
-- Sign up and log in with email and password, or Google (Google needs to be switched on in Supabase, see below)
-- Password reset by email
-- Students: name, display name, university, degree, year, current courses, preferred answer language
-- Tutors: a 4-step application covering profile, transcript upload (read automatically from PDFs, editable), My eQuals link and integrity agreement, then submission for review
-
-**Students**
-- Choose from 40 Australian universities and a searchable course list (any course code can be typed and is added to the catalogue)
-- Questions up to 300 characters with one PDF or image (up to 5 MB)
-- Distinction and HD, or HD only; optional My eQuals verified tutors; similar courses at other unis
-- 2, 3 or 5 answers; urgent (within 20 minutes) or standard (usually within an hour); open for 1 hour to 1 day
-- See answers as they arrive, view each tutor's markup on your document, rate answers, report problems
-
-**Tutors**
-- Profile with rating, reviews, approved courses and tracked earnings ($1.10 per answer, $1.70 for urgent answers within 20 minutes)
-- Feed of open questions they qualify for, including similar courses at other unis
-- Claim one question at a time (10-minute hold)
-- Answer with up to 10 text messages plus pen, highlighter and text notes drawn on the student's document. No file uploads, and pasting is limited to short snippets, so answers can't be old assignments
+- Email and password or Google sign-in, password reset, a short set-up (display name, uni, degree, year, language)
 
 **Admin**
-- Review queue: view the uploaded transcript next to the claimed courses, approve course by course, confirm My eQuals
-- Reports from students
+- Review reports, remove or restore posts and answers, and settle any payouts left over from the old paid version
 
-Payments are not built yet. Tutor earnings are tracked in the database for when they are.
+The paid version (credits, Stripe top-ups, peer mentor transcripts and pay) was switched off in September 2026. Its tables are kept but no longer used.
 
 ## Project layout
 
@@ -79,6 +71,7 @@ Run these in the Supabase SQL editor, in order (all safe to re-run):
 23. `supabase/migration_22_attachment_access.sql`: tutors using "show more questions" can open those attachments
 24. `supabase/migration_23_free_first_question.sql`: every account gets one free question ($3 off), given back if nobody answers
 25. `supabase/migration_24_admins_answer.sql`: admins can answer any open question
+26. `supabase/migration_25_open_forum.sql`: the open forum (posts, answers, upvotes, reports, search) and switching off paid questions
 
 Add test credits to an account (until payments launch):
 

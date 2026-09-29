@@ -1,31 +1,23 @@
-/* Distinction: app logic (Supabase auth, routing and pages) */
+/* Distinction: a free, open Q&A forum for uni students (Supabase auth, routing and pages) */
 (function () {
-  const { $, $$, esc, money, words, initials, kb, ago, left, mins, gradeFor, gcls, stars, toast, status, openModal, closeModal, glassSelect, chipsInput } = UI;
+  const { $, $$, esc, money, initials, ago, toast, status, openModal, closeModal, glassSelect } = UI;
   const cfg = window.DISTINCTION_CONFIG;
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit" } });
   window.sb = sb;
 
-  // Features switched off until there are enough peer mentors
-  const FEATURES = { hdOnly: false, equals: false };
-  const REVIEW_MS = 60e3;  // the hold is 3 minutes on the server: 2 to write, then 1 to review and post
-  const Q_MAX = 300, Q_MIN = 20, A_MAX = 500, WORD_LIMIT = 50, MAX_FILE = 5 * 1024 * 1024, CLAIM_MIN = 2, URGENT_MIN = 20, PAY = 1.10, URGENT_PAY = 1.70;
-  const FILE_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
+  const TITLE_MIN = 8, TITLE_MAX = 150, BODY_MIN = 20, BODY_MAX = 4000, REPLY_MAX = 3000, PAGE = 20;
   const YEARS = ["1st year", "2nd year", "3rd year", "4th year", "5th year or later", "Postgraduate"];
-  const DURS = [{ value: "1", label: "1 hour" }, { value: "3", label: "3 hours" }, { value: "6", label: "6 hours" }, { value: "12", label: "12 hours" }, { value: "24", label: "1 day", sub: "Most answers" }];
-  // "What are you after?" on the Ask page
-  const GOALS = [
-    { v: "answer", label: "Answers", hint: "Just the answer, quickly" },
-    { v: "explanation", label: "Explanation", hint: "Walk me through why it works" },
-    { v: "expertise", label: "Expertise", hint: "Deeper know-how on the topic" },
-    { v: "experience", label: "Experience", hint: "How you studied it, what the exam or assignment was like" },
-    { v: "check_work", label: "Check my work", hint: "Look over my working or draft and point out mistakes" },
-    { v: "course_specific", label: "Course-specific", hint: "Only peer mentors from my uni, in this course or a very close one" },
-  ];
-  const goalLabel = v => (GOALS.find(g => g.v === v) || {}).label || v;
-  const goalChips = gs => (gs || []).map(v => `<span class="goalchip${v === "course_specific" ? " uni" : ""}">${esc(goalLabel(v))}</span>`).join("");
   const validCode = c => /^[A-Z0-9]{3,12}$/.test(c || "") && /\d{3}/.test(c || "");
+  const POST_COLS = "id,uni_id,course_code,title,body,author_id,author_name,author_uni,reply_count,score,accepted_reply,removed,created_at,last_activity";
+  const REPORT_REASONS = [
+    ["assessment", "From an assessment that's still open, or asks for a full solution"],
+    ["wrong", "Wrong or misleading"],
+    ["spam", "Spam or advertising"],
+    ["rude", "Rude, harmful or shares someone's personal details"],
+    ["other", "Something else"]
+  ];
 
-  const S = { names: {}, session: null, user: null, profile: null, unis: [], uniMap: {}, courses: {}, timers: [], ready: false };
+  const S = { session: null, user: null, profile: null, unis: [], uniMap: {}, courses: {}, timers: [], ready: false };
 
   /* ---------------- data ---------------- */
   async function loadUnis() {
@@ -37,23 +29,13 @@
   async function coursesFor(uni) {
     if (!uni) return [];
     if (S.courses[uni]) return S.courses[uni];
-    const { data } = await sb.from("courses").select("code,title,similar_group").eq("uni_id", uni).order("code");
+    const { data } = await sb.from("courses").select("code,title").eq("uni_id", uni).order("code");
     return (S.courses[uni] = data || []);
   }
   const courseOpts = list => list.map(c => ({ value: c.code, label: c.code, sub: c.title }));
   const uniOpts = () => S.unis.map(u => ({ value: u.id, label: u.name, short: u.short_name, sub: u.state }));
-  const PRICE = { 2: 3, 3: 4.5, 5: 7.5 }, URGENT_FEE = 0.75, HD_FEE = 0.5;
-  const priceFor = (n, urgent, hd) => PRICE[n] + (urgent ? URGENT_FEE * n : 0) + (hd ? HD_FEE * n : 0);
-  async function refreshCredits() { if (!S.user) return; const { data } = await sb.from("profiles").select("credits, free_questions").eq("id", S.user.id).single(); if (data && S.profile) { S.profile.credits = Number(data.credits); S.profile.free_questions = data.free_questions; renderHeader(); } }
-  async function settle() { const { data } = await sb.rpc("settle_my_questions"); if (Number(data) > 0) { toast(`${money(Number(data))} refunded to your credits for unanswered spots`); await refreshCredits(); } }
   const uniName = id => (S.uniMap[id] && S.uniMap[id].name) || id || "";
   const uniShort = id => (S.uniMap[id] && S.uniMap[id].short_name) || id || "";
-  async function ensureCourse(uni, code) {
-    const list = await coursesFor(uni);
-    if (list.some(c => c.code === code)) return;
-    await sb.from("courses").insert({ uni_id: uni, code, title: "", source: "user" });
-    list.push({ code, title: "" });
-  }
   async function loadProfile() {
     if (!S.user) { S.profile = null; return; }
     let { data, error } = await sb.from("profiles").select("*").eq("id", S.user.id).maybeSingle();
@@ -69,20 +51,21 @@
   }
   const displayName = p => (p && (p.display_name || (p.full_name || "").split(" ")[0])) || "Student";
   const errMsg = e => (e && (e.message || e.error_description)) || "Something went wrong. Try again.";
+  // Plain text with line breaks kept and web links made clickable
+  const richText = s => esc(s).replace(/\bhttps?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]/g, u => `<a href="${u}" target="_blank" rel="nofollow ugc noopener noreferrer">${u}</a>`);
+  const snippet = (s, n) => { const t = String(s || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n).replace(/\s+\S*$/, "") + "…" : t; };
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + "s")}`;
 
   /* ---------------- shell ---------------- */
   function renderHeader() {
     const p = S.profile, signedIn = !!S.user;
-    const here = curPath().split("/")[1] || "";
-    const links = signedIn && p && p.onboarded ? [
-      ["ask", "Ask a question"], ["questions", "My questions"], ["tutor", p.tutor_status === "approved" ? "Peer mentor" : "Become a peer mentor"], ["credits", "Credits"],
-      ...(p.is_admin ? [["admin", "Admin"]] : [])
-    ] : [];
-    $("#nav").innerHTML = links.map(([r, l]) => `<a href="/${r}" class="navlink" ${here === r || (r === "tutor" && here === "answer") ? 'aria-current="page"' : ""}>${l}</a>`).join("");
+    const here = location.pathname.split("/")[1] || "";
+    const links = [["", "Forum"], ["ask", "Ask a question"], ...(signedIn && p && p.onboarded ? [["my", "My posts"], ...(p.is_admin ? [["admin", "Admin"]] : [])] : [])];
+    $("#nav").innerHTML = links.map(([r, l]) => `<a href="/${r}" class="navlink" ${here === r || (r === "" && here === "p") ? 'aria-current="page"' : ""}>${l}</a>`).join("");
     const ZH = "Mandarin (Simplified Chinese)", cur = window.I18N ? I18N.lang : "English";
     const langBtn = `<button class="lang-btn" id="lang-btn" data-notr title="${cur === ZH ? "Switch to English" : "切换到中文"}" aria-label="${cur === ZH ? "Switch to English" : "Switch to Mandarin"}"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 8h13M8 1.5c2 2.2 2 10.8 0 13M8 1.5c-2 2.2-2 10.8 0 13" fill="none" stroke="currentColor" stroke-width="1.3"/></svg><span class="${cur === "English" ? "on" : ""}">EN</span><span class="sep">/</span><span class="${cur === ZH ? "on" : ""}">中文</span></button>`;
     $("#auth-area").innerHTML = langBtn + (signedIn
-      ? `${p && p.onboarded ? `<a class="credit-pill" href="/credits" title="Your credits">Credits <b>${money(Number(p.credits || 0))}</b></a>` : ""}<button class="avatar-btn" id="me-btn" aria-haspopup="menu"><span class="avatar" aria-hidden="true">${esc(initials(p && p.full_name || S.user.email))}</span><span data-notr>${esc(p ? displayName(p) : "Account")}</span></button>`
+      ? `<button class="avatar-btn" id="me-btn" aria-haspopup="menu"><span class="avatar" aria-hidden="true">${esc(initials(p && p.full_name || S.user.email))}</span><span data-notr>${esc(p ? displayName(p) : "Account")}</span></button>`
       : `<a class="btn ghost sm" href="/login">Log in</a><a class="btn primary sm" href="/signup">Sign up</a>`);
     $("#lang-btn").onclick = async () => {
       const next = (window.I18N && I18N.lang === ZH) ? "English" : ZH;
@@ -92,7 +75,7 @@
     };
     const btn = $("#me-btn");
     if (btn) btn.onclick = e => { e.stopPropagation(); const m = $("#menu"); m.hidden = !m.hidden; };
-    $("#menu").innerHTML = signedIn ? `<div class="who">Signed in as<br><b style="color:var(--ink)">${esc(S.user.email)}</b></div><a href="/profile">Profile and settings</a><a href="/tutor">Peer mentor profile</a><button id="signout">Sign out</button>` : "";
+    $("#menu").innerHTML = signedIn ? `<div class="who">Signed in as<br><b style="color:var(--ink)">${esc(S.user.email)}</b></div><a href="/my">My posts</a><a href="/profile">Profile and settings</a><button id="signout">Sign out</button>` : "";
     const so = $("#signout"); if (so) so.onclick = async () => { $("#menu").hidden = true; await sb.auth.signOut(); toast("Signed out"); go("/"); };
   }
   document.addEventListener("click", e => { if (!e.target.closest("#menu") && !e.target.closest("#me-btn")) $("#menu").hidden = true; });
@@ -103,45 +86,48 @@
 
   const app = () => $("#app");
   function clearTimers() { S.timers.forEach(clearInterval); S.timers = []; }
-  const clock = ms => { const t = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
-  // Google Analytics: page views for the hash routes, plus a few key events. No personal details are sent.
+  // Google Analytics: page views plus a few key events. No personal details are sent.
   const track = (name, params) => { try { window.gtag && gtag("event", name, params || {}); } catch (e) { } };
   function trackPage(parts) {
     const path = "/" + parts.map(x => /^[0-9a-f-]{20,}$/i.test(x) ? ":id" : x).filter(Boolean).join("/");
     track("page_view", { page_location: location.origin + path, page_path: path, page_title: document.title + (path === "/" ? "" : " · " + parts[0]) });
   }
-  function every(ms, fn) { S.timers.push(setInterval(fn, ms)); }
-  const refreshBtn = id => `<button type="button" class="btn ghost sm refresh" id="${id}" aria-label="Refresh"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Refresh</span></button>`;
-  function wireRefresh(id, fn) {
-    const b = $("#" + id); if (!b) return;
-    b.onclick = async () => { b.classList.add("busy"); b.disabled = true; try { await fn(); } finally { setTimeout(() => { b.classList.remove("busy"); b.disabled = false; }, 400); } };
-    every(15000, () => document.querySelectorAll("[data-updated]").forEach(el => { const t = +el.dataset.updated; if (t) el.textContent = Date.now() - t < 20000 ? "Updated just now" : `Updated ${ago(t)}`; }));
+  // Ask signed-out visitors to log in, then bring them back here
+  function needLogin(what) {
+    openModal(`<h3>Log in to ${esc(what)}</h3><p class="muted" style="font-size:14px">Reading is open to everyone. You need a free account to post, answer, upvote or report.</p><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Not now</button><a class="btn" href="/login" id="nl-in">Log in</a><a class="btn primary" href="/signup" id="nl-up">Sign up</a></div>`, m => {
+      m.querySelectorAll("a").forEach(a => a.addEventListener("click", () => { sessionStorage.setItem("after-login", location.pathname + location.search); closeModal(); }));
+    });
   }
 
   /* ---------------- router ---------------- */
-  const curPath = () => location.pathname || "/";
+  const curPath = () => (location.pathname || "/") + location.search;
   function go(path, replace) {
     path = String(path || "/").replace(/^#\/?/, "/");
     if (!path.startsWith("/")) path = "/" + path;
     if (path !== curPath()) history[replace ? "replaceState" : "pushState"](null, "", path);
     route();
   }
-  const PUBLIC = ["", "login", "signup", "reset", "new-password", "alerts-off"];
+  const PUBLIC = ["", "p", "login", "signup", "reset", "new-password"];
+  // Pages from the old paid version: send people to the forum
+  const RETIRED = ["tutor", "credits", "questions", "q", "answer", "alerts-off"];
   async function route() {
     if (!S.ready) return;
     clearTimers(); closeModal(); $("#menu").hidden = true;
-    const parts = curPath().replace(/^\/+/, "").split("/");
+    document.title = "Distinction · Uni course Q&A forum";
+    const parts = location.pathname.replace(/^\/+/, "").split("/");
     const r = parts[0] || "";
+    if (RETIRED.includes(r)) { go(r === "questions" ? (S.user ? "/my" : "/") : "/", true); return; }
     renderHeader();
     window.scrollTo(0, 0);
     trackPage(parts);
     if (!S.user && !PUBLIC.includes(r)) { sessionStorage.setItem("after-login", curPath()); go("/login"); return; }
     if (S.user && ["login", "signup"].includes(r)) { go("/"); return; }
     if (S.user && !S.profile && r !== "new-password") { app().innerHTML = `<div class="empty">We couldn't load your account. <button class="btn sm" id="retry-prof">Try again</button> <button class="btn ghost sm" id="so-prof">Sign out</button></div>`; $("#retry-prof").onclick = async () => { await loadProfile(); route(); }; $("#so-prof").onclick = async () => { await sb.auth.signOut(); go("/login"); }; return; }
-    if (S.user && S.profile && !S.profile.onboarded && !["welcome", "new-password"].includes(r)) { go("/welcome"); return; }
+    if (S.user && S.profile && !S.profile.onboarded && !["welcome", "new-password", "", "p"].includes(r)) { sessionStorage.setItem("after-welcome", curPath()); go("/welcome"); return; }
     try {
       switch (r) {
-        case "": return S.user ? go("/ask", true) : pageHome();
+        case "": return await pageForum();
+        case "p": return await pagePost(parts[1]);
         case "login": return await pageLogin();
         case "signup": return await pageSignup();
         case "reset": return await pageReset();
@@ -149,18 +135,13 @@
         case "welcome": return await pageWelcome();
         case "profile": return await pageProfile();
         case "ask": return await pageAsk();
-        case "questions": return await pageMyQuestions();
-        case "q": return await pageQuestion(parts[1]);
-        case "tutor": return await (parts[1] === "apply" ? pageTutorApply() : parts[1] === "answers" ? pageMyAnswers() : pageTutor());
-        case "answer": return await pageAnswer(parts[1]);
+        case "my": return await pageMine();
         case "admin": return await pageAdmin();
-        case "credits": return await pageCredits(parts[1]);
-        case "alerts-off": return await pageAlertsOff(parts[1], parts[2]);
-        default: app().innerHTML = `<div class="empty">Page not found. <a href="/">Go home</a></div>`;
+        default: app().innerHTML = `<div class="empty">Page not found. <a href="/">Go to the forum</a></div>`;
       }
     } catch (e) { console.error(e); app().innerHTML = `<div class="status err">${esc(errMsg(e))}</div>`; }
   }
-  // Clean URLs (/tutor instead of /#/tutor). Old #/ links still work: they're converted on the fly.
+  // Old #/ links still work: they're converted on the fly.
   function fromHash() { if (/^#\/?[a-z]/i.test(location.hash) || location.hash === "#/") { history.replaceState(null, "", location.hash.replace(/^#\/?/, "/")); return true; } return false; }
   window.addEventListener("popstate", route);
   window.addEventListener("hashchange", () => { if (fromHash()) route(); });
@@ -171,80 +152,6 @@
     if (!href.startsWith("/") || href.startsWith("//") || /\.(html|pdf|png|jpe?g|svg)$/i.test(href)) return;
     e.preventDefault(); go(href);
   });
-
-  /* ---------------- landing ---------------- */
-  function pageHome() {
-    app().innerHTML = `<section class="view">
-      <div class="hero-land">
-        <div>
-          <p class="tagline">Let's succeed as a generation.</p>
-          <h1 class="rotor" id="rotor" data-notr></h1>
-          <p class="fast"><span class="pulse" aria-hidden="true"></span>Receive an answer in a couple of minutes</p>
-          <p class="muted" style="max-width:52ch;margin-top:12px">Pick your uni and course, ask a short question, and it goes to students who got a Distinction or High Distinction in that exact course, and in similar courses at other unis. Standard questions are usually answered within an hour, and urgent ones within 20 minutes.</p>
-          <div class="cta-row"><a class="btn primary" href="/signup">Become a peer mentor</a><a class="btn" href="/signup">Ask your first question free</a><a class="btn ghost" href="/login">Log in</a></div>
-        </div>
-        <div class="q demo-q" role="figure" aria-label="Example question and answer">
-          <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">INFS2608</span><span class="q-time">UNSW · 2 min ago</span></span><span class="q-exp live">Urgent</span></div>
-          <div class="demo-tr"><p class="q-text" data-demo="0"></p></div>
-          <div class="ans"><div class="ans-head"><span class="ord">1st</span><b data-notr>Tom N.</b><span class="grade">92<span class="badge HD">HD</span></span></div>
-          <div class="bubbles demo-tr"><div class="bubble" data-demo="1"></div><div class="bubble" data-demo="2"></div></div></div>
-        </div>
-      </div>
-      <div class="two-up">
-        <div class="panel feature"><span class="eyebrow">For students</span><h2>Answers from people who aced your course</h2><ul><li>Pick your uni and course from 40 Australian universities</li><li>300-character questions with one PDF or image</li><li>Every peer mentor with a D or HD in your course, or a similar one, can see and claim it</li><li>Get 2, 3 or 5 answers. Rate each one.</li><li><b>Your first question is free.</b></li></ul><a class="btn primary" href="/signup" style="align-self:flex-start">Sign up as a student</a></div>
-        <div class="panel feature tutors-panel"><div class="row" style="justify-content:space-between;align-items:center;gap:8px"><span class="eyebrow">For peer mentors</span><span class="hiring-tag"><span class="pulse" aria-hidden="true"></span>Now recruiting</span></div><h2>Get paid to answer questions you already know</h2><ul><li>Upload your transcript. Our AI approves every course where you got a D or HD.</li><li>Claim a question and answer it in 2 minutes, with short messages and by drawing on the student's document.</li><li>Earn $1 to $2 for every 2-minute answer. That's roughly $33 to $51 an hour while you're answering.</li></ul><p class="muted" style="font-size:13px">Create a free account first, then apply to become a peer mentor from your account.</p><a class="btn" href="/signup" style="align-self:flex-start">Create an account</a></div>
-      </div>
-      <div class="faq"><h2>Common questions</h2><details class="faq-item"><summary>How accurate and reliable are the answers?</summary><p>Every peer mentor got a Distinction (75+) or High Distinction (85+) in your course, or a very similar one, read straight from their transcript by our AI. Each answer shows the peer mentor's mark and rating, and you can get 2, 3 or 5 answers to compare. Peer mentors are students, so double-check anything important against your course materials.</p></details><details class="faq-item"><summary>Is it safe to hand in my transcript?</summary><p>Yes. Our AI only reads the course codes and marks. It's set up to ignore your name, student number, address and date of birth, and the file is deleted from our records as soon as it's read. Only your courses and marks are kept, and they're only shown next to your answers.</p></details><details class="faq-item"><summary>How fast will I get an answer?</summary><p>Peer mentors get 2 minutes to answer once they claim your question, so answers often arrive within minutes. Standard questions are usually answered within an hour. Tick Urgent and answers come within 20 minutes.</p></details><details class="faq-item"><summary>What does it cost, and what if nobody answers?</summary><p>Your first question is free. After that, questions start at $3 for 2 answers. You only pay for answers you receive: when your question closes, any unanswered spots are refunded to your credits automatically. You can close a question early at any time.</p></details><details class="faq-item"><summary>Is this cheating?</summary><p>No. Distinction is for understanding: explaining a concept, spotting a mistake, or hearing how someone approached the course. Peer mentors won't write assessable work for you, and questions are capped at 300 characters to keep them focused. Always follow your university's academic integrity rules.</p></details><details class="faq-item"><summary>How do you stop AI-written answers?</summary><p>Peer mentors have to type every answer themselves. Pasting is turned off, the question can't be copied, and they only get 2 minutes. Every answer is also checked for AI writing. Flagged answers are reviewed, and peer mentors with repeated flags are paused.</p></details><details class="faq-item"><summary>Who can become a peer mentor, and how do they get paid?</summary><p>Anyone with a D or HD in a course can mentor it. Upload your transcript and our AI approves you in about 20 seconds. You get 2 minutes per answer and earn $1 to $2 each, so while you're answering that works out to roughly $33 to $51 an hour, with the top end from early bird questions. How much you make depends on how many questions come in for your courses, so turn on email alerts to catch them. Earnings are tracked from your first answer, and payouts to your bank account are being set up.</p></details><details class="faq-item"><summary>Can I ask in another language?</summary><p>Yes. Choose your language in your profile and the whole site switches to it. Questions and answers written in other languages are translated for you automatically, with a Show original button.</p></details></div>
-    </section>`;
-    paintDemo(); startRotor();
-  }
-
-  // Homepage headlines: cycle every few seconds. Hand-written Mandarin; other languages use the automatic translator.
-  const HEADLINES = [
-    ["Ask about any course. Get answers from students with an <em>HD</em>.", "任何课程都能问。<em>HD</em> 学长学姐来回答。"],
-    ["ChatGPT and Claude answer from the whole internet. Our peer mentors <em>aced your course</em>.", "ChatGPT 和 Claude 的答案来自整个互联网。我们的学长学姐<em>在你的课程拿过高分</em>。"],
-    ["Stuck at 11pm? An <em>HD student</em> answers in minutes.", "深夜卡住了？<em>HD 学生</em>几分钟内回复你。"],
-    ["Learn from the students who <em>topped your course</em>.", "向<em>在你的课程拿到最高分</em>的同学请教。"],
-    ["Not a generic answer. One from someone who <em>sat your exam</em>.", "不是泛泛的答案，而是来自<em>考过同一门考试</em>的人。"]
-  ];
-  function startRotor() {
-    const el = $("#rotor"); if (!el) return;
-    const lang = window.I18N ? I18N.lang : "English", zh = lang === "Mandarin (Simplified Chinese)";
-    const own = lang === "English" || zh;
-    if (!own) el.removeAttribute("data-notr");
-    el.innerHTML = HEADLINES.map((h, i) => `<span class="rot${i ? "" : " on"}"${i ? ' aria-hidden="true"' : ""}>${own ? h[zh ? 1 : 0] : h[0].replace(/<\/?em>/g, "")}</span>`).join("");
-    if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    let i = 0;
-    every(4500, () => {
-      const items = el.querySelectorAll(".rot"); if (!items.length) return;
-      items[i].classList.remove("on"); items[i].setAttribute("aria-hidden", "true");
-      i = (i + 1) % items.length;
-      items[i].classList.add("on"); items[i].removeAttribute("aria-hidden");
-    });
-  }
-
-  // Homepage example: a question only someone who did the course can answer. Pre-translated for Mandarin.
-  const DEMO = [
-    ["Assignment 1 caps the ERD at 8 entities, but my tutor said Specialisation should be its own entity. Did you keep it separate and still stay under 8? Did it cost you marks?",
-     "作业1要求 ERD 最多 8 个实体，但我的辅导老师说 Specialisation 应该单独做成一个实体。你当时是单独做的吗？还能控制在 8 个以内吗？有没有被扣分？"],
-    ["I kept it separate and merged Appointment and Treatment into one entity, so I landed on exactly 8.",
-     "我把它单独做了，然后把 Appointment 和 Treatment 合并成一个实体，刚好 8 个。"],
-    ["Just explain it in your assumptions. The markers cared way more about normalisation than the entity count. I got 18/20.",
-     "在 assumptions 里解释清楚就行。评分更看重规范化，而不是实体数量。我拿了 18/20。"]
-  ];
-  function paintDemo() {
-    const zh = window.I18N && I18N.lang === "Mandarin (Simplified Chinese)";
-    let showZh = zh;
-    const paint = () => {
-      $$("[data-demo]").forEach(el => { el.setAttribute("data-notr", ""); el.textContent = DEMO[+el.dataset.demo][showZh ? 1 : 0]; });
-      const slot = $(".demo-q .demo-tr"); if (!slot) return;
-      let b = $(".demo-q .tr-toggle");
-      if (!zh) { if (b) b.remove(); return; }
-      if (!b) { b = document.createElement("button"); b.type = "button"; b.className = "tr-toggle"; slot.append(b); b.onclick = () => { showZh = !showZh; paint(); }; }
-      b.innerHTML = `${TR_ICON}<span>${showZh ? "Translated from English · Show original" : "Show translation"}</span>`;
-    };
-    paint();
-  }
 
   /* ---------------- auth ---------------- */
   const GOOGLE_SVG = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
@@ -277,7 +184,7 @@
   function pageSignup() {
     app().innerHTML = `<div class="narrow"><form class="panel auth-card" id="f" novalidate>
       <h1>Create your account</h1>
-      <p class="muted" style="font-size:14px">Every account starts as a student account. Once you're set up, you can apply to become a peer mentor for the courses you aced.</p>
+      <p class="muted" style="font-size:14px">Anyone can read the forum. An account lets you ask questions, answer them and upvote. It's free.</p>
       <button type="button" class="btn block google" id="g">${GOOGLE_SVG}Sign up with Google</button>
       <div class="divider">or</div>
       <label class="field"><span>Full name</span><input type="text" id="name" autocomplete="name" required></label>
@@ -351,21 +258,21 @@
     ["Punjabi", "Punjabi · ਪੰਜਾਬੀ"], ["Malay", "Malay · Bahasa Melayu"]
   ];
   const langValue = v => LANGS.some(l => l[0] === v) ? v : "English";
-  // parts: about (names), studies (uni, degree, year), prefs (language, heard), bio (peer mentor intro)
+  // parts: about (names), studies (uni, degree, year), prefs (language, heard)
   async function profileFields(root, p, opts = {}) {
     const parts = opts.parts || ["about", "studies", "prefs"];
     const has = k => parts.includes(k);
     root.innerHTML = `
       ${has("about") ? `<div class="two">
         <label class="field"><span>Full name</span><input type="text" id="pf-name" value="${esc(p.full_name || "")}" autocomplete="name"></label>
-        <label class="field"><span>Display name</span><input type="text" id="pf-display" value="${esc(p.display_name || "")}" placeholder="e.g. Alex C." maxlength="30"><small>This is what ${opts.tutor ? "students" : "peer mentors"} see.</small></label>
+        <label class="field"><span>Display name</span><input type="text" id="pf-display" value="${esc(p.display_name || "")}" placeholder="e.g. Alex C." maxlength="30"><small>Shown next to your posts. Your full name and email aren't shown.</small></label>
       </div>` : ""}
       ${has("studies") ? `<div class="field"><span id="pf-uni-lbl">University</span><div id="pf-uni" data-label="pf-uni-lbl"></div></div>
       <div class="field"><span id="pf-degree-lbl">Degree</span><div id="pf-degree" data-label="pf-degree-lbl"></div><small>Can't find yours? Type it in the search box.</small></div>
       <div class="field"><span id="pf-year-lbl">Year of study</span><div id="pf-year" data-label="pf-year-lbl"></div></div>` : ""}
       ${has("bio") ? `<label class="field"><span>Short intro for students</span><textarea class="prose" id="pf-bio" maxlength="400" placeholder="What you're good at explaining.">${esc(p.bio || "")}</textarea></label>` : ""}
       ${has("prefs") ? `<div class="field"><span id="pf-lang-lbl">Language</span><div id="pf-lang" data-label="pf-lang-lbl" data-notr></div><small>The whole site switches to this language. Questions and answers written in other languages are translated into it, and you can always tap "Show original".</small></div>
-      ${opts.tutor ? "" : `<label class="field"><span>How did you hear about us? (optional)</span><input type="text" id="pf-heard" value="${esc(p.heard_from || "")}" maxlength="80"></label>`}` : ""}`;
+      <label class="field"><span>How did you hear about us? (optional)</span><input type="text" id="pf-heard" value="${esc(p.heard_from || "")}" maxlength="80"></label>` : ""}`;
     let uniSel, degSel, yearSel, langSel;
     if (has("studies")) {
       uniSel = glassSelect($("#pf-uni", root), { options: uniOpts(), value: p.uni_id || null, placeholder: "Choose your university", search: "Search universities", hideSub: true });
@@ -401,13 +308,13 @@
     return data;
   }
 
-  /* Student sign-up: three short steps, like the peer mentor application */
+  /* Account set-up: three short steps */
   async function pageWelcome() {
     const p = S.profile;
     const W = { step: 1 };
-    const STEPS = [["About you", ["about"], "What should peer mentors call you?"], ["Your studies", ["studies"], "This helps us send your questions to the right people."], ["Preferences", ["prefs"], "Choose your language. The whole site is shown in it, and questions and answers written in other languages are translated for you."]];
+    const STEPS = [["About you", ["about"], "This is the name other students see on your posts."], ["Your studies", ["studies"], "Your university is shown next to your posts and picked by default when you ask."], ["Preferences", ["prefs"], "Choose your language. The whole site is shown in it, and questions and answers written in other languages are translated for you."]];
     app().innerHTML = `<div class="medium"><div class="col">
-      <div><span class="eyebrow">Student sign-up</span><h1 style="font-size:30px;margin-top:4px">Set up your student account</h1></div>
+      <div><span class="eyebrow">Welcome</span><h1 style="font-size:30px;margin-top:4px">Set up your account</h1></div>
       <div class="steps" id="steps"></div><div class="panel" id="body"></div>
       </div></div>`;
     async function render() {
@@ -431,14 +338,13 @@
       window.scrollTo(0, 0);
     }
     function finished() {
+      const after = sessionStorage.getItem("after-welcome") || "/ask"; sessionStorage.removeItem("after-welcome");
       $("#steps").innerHTML = STEPS.map((s, i) => `<span class="done">${i + 1}. ${s[0]}</span>`).join("");
       $("#body").innerHTML = `<div class="pending-card"><span class="status-pill approved">Account ready</span>
         <h2 style="font-size:26px">You're all set, ${esc(displayName(S.profile))}</h2>
-        <p class="muted">You can now ask questions about any course. Questions are paid with credits, starting at $3 for 2 answers.</p>
-        <a class="btn primary" href="/ask">Ask a question</a></div>`;
-      $("#body").insertAdjacentHTML("afterend", `<div class="panel" style="gap:10px"><span class="eyebrow">Optional</span><h2 style="font-size:22px">Got a D or HD in a course? Earn by mentoring it.</h2>
-        <p class="muted" style="font-size:14px">Get paid to answer questions you already know. Earn $1 to $2 for every 2-minute answer in the courses you aced. Upload your transcript and our AI approves you in about 20 seconds.</p>
-        <div class="row"><a class="btn" href="/tutor/apply">Apply to be a peer mentor</a><a class="btn ghost" href="/ask">Maybe later</a></div></div>`);
+        <p class="muted">You can now ask and answer questions about any course. It's free.</p>
+        <div class="row"><a class="btn primary" href="${esc(after)}">${after === "/ask" ? "Ask a question" : "Continue"}</a><a class="btn" href="/${S.profile.uni_id ? "?uni=" + encodeURIComponent(S.profile.uni_id) : ""}">Browse questions at your uni</a></div></div>`;
+
       window.scrollTo(0, 0);
     }
     render();
@@ -451,327 +357,12 @@
       <div id="fields" class="col"></div>
       <div id="st" hidden></div>
       <div class="row" style="justify-content:space-between"><button class="btn ghost" id="out">Sign out</button><button class="btn primary" id="save">Save changes</button></div></div></div>`;
-    const read = await profileFields($("#fields"), p, { tutor: p.tutor_status !== "none", parts: p.tutor_status !== "none" ? ["about", "studies", "bio", "prefs"] : ["about", "studies", "prefs"] });
+    const read = await profileFields($("#fields"), p, { parts: ["about", "studies", "prefs"] });
     $("#out").onclick = async () => { await sb.auth.signOut(); go("/"); };
     $("#save").onclick = async () => {
       const v = read(); const bad = checkProfile(v); if (bad) return status($("#st"), bad, "err");
       try { await saveProfile({ ...v, is_student: true, onboarded: true }); status($("#st"), "Saved.", "ok"); } catch (e) { status($("#st"), errMsg(e), "err"); }
     };
-  }
-
-  /* ---------------- ask ---------------- */
-  async function pageAsk() {
-    const p = S.profile;
-    app().innerHTML = `<section class="view">
-      <div class="intro" style="align-items:start">
-        <div>
-          <p class="tagline">Let's succeed as a generation.</p>
-          <h1>Ask about any course. Students with an <em>HD</em> answer.</h1>
-          <p class="fast"><span class="pulse" aria-hidden="true"></span>Receive an answer in a couple of minutes</p>
-          <p>Your question goes to every student who got a Distinction or High Distinction in that course, or a similar course at your uni or another. Standard questions are usually answered within an hour. Tick Urgent for answers within 20 minutes.</p>
-          <div class="how" style="margin-top:22px">
-            <div><span class="stepno">1 · PICK</span><b>Uni and course</b><p>Choose your uni and course, write up to 300 characters and attach one file.</p></div>
-            <div><span class="stepno">2 · CHOOSE</span><b>Who answers</b><p>Everyone who got a D or HD in that course or a similar one.</p></div>
-            <div><span class="stepno">3 · GET</span><b>Answers</b><p>Peer mentors reply in short messages and can mark up your PDF or image directly.</p></div>
-          </div>
-          <a class="recruit" href="/tutor"><span><b>Got an HD?</b> Get paid to answer questions you already know: $1 to $2 for every 2-minute answer.</span><span class="recruit-go">Start earning →</span></a>
-        </div>
-        <form class="panel composer" id="compose" novalidate>
-          <div class="two tight">
-            <div class="field"><span id="a-uni-lbl">University</span><div id="a-uni" data-label="a-uni-lbl"></div></div>
-            <div class="field"><span id="a-course-lbl">Course</span><div class="pop-right" id="a-course" data-label="a-course-lbl"></div></div>
-          </div>
-          <div class="field"><span>Who can answer</span>
-            <div class="seg" role="radiogroup" aria-label="Minimum grade" ${FEATURES.hdOnly ? "" : "hidden"}><label><input type="radio" name="a-grade" value="75" checked><span>Distinction and HD</span></label><label><input type="radio" name="a-grade" value="85"><span>HD only <em class="plus-cr" id="a-hd-fee">+${money(HD_FEE * 2)}</em></span></label></div>
-            <p class="speed-note stack-note" id="a-grade-note">${[0, 1, 2, 3].map(i => `<span data-v="${i}"${i ? " hidden-note" : ""}></span>`).join("")}</p>
-          </div>
-          <fieldset class="field goals"><legend>What are you after? <small class="muted">Tick any</small></legend>
-            <div class="goal-grid">${GOALS.map(g => `<label class="goal"><input type="checkbox" name="a-goal" value="${g.v}"><span><b>${g.label}</b><small>${g.hint}</small></span></label>`).join("")}</div>
-          </fieldset>
-          <div class="field">
-            <div class="row" style="justify-content:space-between"><label for="a-text" style="font-size:13px;font-weight:500">Your question</label><span class="words" id="a-words">0 / ${Q_MAX} characters</span></div>
-            <textarea class="prose" id="a-text" maxlength="${Q_MAX}" style="min-height:76px" placeholder="Keep it short: what you're stuck on and which week or assignment it's from."></textarea>
-            <div class="attach"><label class="linkbtn attach-btn" for="a-file" id="a-file-btn">+ Attach a file</label><input type="file" id="a-file" accept="${FILE_TYPES.join(",")}" hidden><span id="a-file-chip"></span><small class="muted">1 image or PDF, up to 5 MB</small></div>
-          </div>
-          <div class="field"><span>How many answers</span>
-            <div class="boxes" role="radiogroup" aria-label="Number of answers">
-              ${[2, 3, 5].map((n, i) => `<label><input type="radio" name="a-count" value="${n}" ${i === 0 ? "checked" : ""}><span class="box"><b>${n}</b><small>answers</small><em>${money(PRICE[n])}</em></span></label>`).join("")}
-            </div>
-            <p class="speed-note">Standard questions are usually answered within an hour.</p>
-            <label class="check urgent-check"><input type="checkbox" id="a-urgent"><span><b>Urgent</b>: answers within 20 minutes <em class="plus-cr" id="a-urgent-fee">+${money(URGENT_FEE * 2)}</em></span></label>
-          </div>
-          <div class="post-row"><div class="field dur"><span id="a-dur-lbl">Open for</span><div id="a-dur" data-label="a-dur-lbl"></div><small class="muted">Closes automatically after this time. You can close it earlier whenever you want.</small></div><div class="total" id="a-cost"></div><button class="btn primary" id="a-post">Post question</button></div>
-          ${Number(p.free_questions || 0) > 0 ? `<div class="free-q">🎁 <span><b>Your first question is free.</b> We take $3 off, which covers a standard question with 2 answers.</span></div>` : ""}
-          <div class="price-row muted"><span>Your balance: <b class="mono" style="color:var(--ink)">${money(Number(p.credits || 0))}</b></span><span>Unanswered spots are refunded when the question closes.</span></div>
-          <div id="a-status" hidden></div>
-        </form>
-      </div>
-      <div class="col"><div class="results-head"><h2>Your recent questions</h2><div class="row" style="gap:8px"><span class="muted upd" data-updated></span>${refreshBtn("ref-recent")}<a href="/questions">See all</a></div></div><div class="qgrid" id="recent"></div></div>
-    </section>`;
-
-    const courseSel = glassSelect($("#a-course"), { options: [], value: null, mono: true, placeholder: "Choose a course", search: "Type a course code or name, e.g. COMP", freeText: validCode, minQuery: 3, minText: "Type at least 3 letters of the course code or name, e.g. COMP or Accounting", emptyText: "No matches. Type the full course code to use it." });
-    async function loadCourses(uni) {
-      const list = courseOpts(await coursesFor(uni));
-      const mine = (p.current_courses || []).filter(c => uni === p.uni_id);
-      mine.forEach(c => { if (!list.some(o => o.value === c)) list.unshift({ value: c, label: c, sub: "Your course" }); });
-      list.sort((a, b) => (mine.includes(b.value) - mine.includes(a.value)) || a.value.localeCompare(b.value));
-      courseSel.setOptions(list, mine[0] || null);
-    }
-    const uniSel2 = glassSelect($("#a-uni"), { options: uniOpts(), value: p.uni_id, search: "Search universities", hideSub: true, onChange: u => { loadCourses(u); paintReach(); } });
-    function paintCost() {
-      const n = +document.querySelector('input[name="a-count"]:checked').value, urgent = $("#a-urgent").checked, hd = isHD();
-      document.querySelectorAll('input[name="a-count"]').forEach(r => r.parentElement.querySelector("em").textContent = money(priceFor(+r.value, urgent, hd)));
-      $("#a-urgent-fee").textContent = "+" + money(URGENT_FEE * n);
-      $("#a-hd-fee").textContent = "+" + money(HD_FEE * n);
-      const full = priceFor(n, urgent, hd), off = Number(p.free_questions || 0) > 0 ? Math.min(3, full) : 0;
-      $("#a-cost").innerHTML = off ? `<small>${n} answers${urgent ? " + urgent" : ""} · free first question</small><b class="mono"><s class="muted" style="font-weight:400;font-size:14px">${money(full)}</s> ${money(full - off)}</b>` : `<small>${n} answers${hd ? " + HD only" : ""}${urgent ? " + urgent" : ""}</small><b class="mono">${money(full)}</b>`;
-    }
-    const isHD = () => +document.querySelector('input[name="a-grade"]:checked').value >= 85;
-    document.querySelectorAll('input[name="a-count"], #a-urgent, input[name="a-grade"]').forEach(el => el.addEventListener("change", paintCost));
-    const goalsPicked = () => [...document.querySelectorAll('input[name="a-goal"]:checked')].map(el => el.value);
-    function paintReach() {
-      const hd = +document.querySelector('input[name="a-grade"]:checked').value >= 85, uniOnly = goalsPicked().includes("course_specific");
-      // every variant is laid out in the same spot, so the tallest one sets the height and nothing below moves
-      const uni = uniShort(uniSel2.value) || "your uni";
-      const variants = [[false, false], [true, false], [false, true], [true, true]].map(([h, u]) =>
-        `${h ? "Only peer mentors who got an HD (85+)" : "Peer mentors who got a D or HD"} ${u ? `in this course at ${uni}, or a very close course there` : "in this course, or a similar course at any uni"}, can see and claim it.${h || u ? " Fewer peer mentors, so answers may take a little longer." : ""}`);
-      const cur = (hd ? 1 : 0) + (uniOnly ? 2 : 0);
-      $$("#a-grade-note span").forEach((el, i) => { el.textContent = variants[i]; el.toggleAttribute("hidden-note", i !== cur); });
-    }
-    document.querySelectorAll('input[name="a-grade"], input[name="a-goal"]').forEach(el => el.addEventListener("change", paintReach));
-    paintCost(); paintReach();
-    await loadCourses(p.uni_id);
-    const durSel = glassSelect($("#a-dur"), { options: DURS, value: "24" });
-
-    let attach = null;
-    $("#a-file").onchange = e => {
-      const f = e.target.files[0]; e.target.value = ""; if (!f) return;
-      if (!FILE_TYPES.includes(f.type)) return toast("Attach a PDF or an image (PNG, JPG or WebP).");
-      if (f.size > MAX_FILE) return toast(`That file is ${kb(f.size)}. The limit is 5 MB.`);
-      attach = f; renderAttach();
-    };
-    function renderAttach() {
-      $("#a-file-chip").innerHTML = attach ? `<span class="fchip">${attach.type === "application/pdf" ? "PDF" : "IMG"} · ${esc(attach.name)} · ${kb(attach.size)} <button type="button" class="linkbtn" id="a-file-rm">Remove</button></span>` : "";
-      $("#a-file-btn").hidden = !!attach;
-      const rm = $("#a-file-rm"); if (rm) rm.onclick = () => { attach = null; renderAttach(); };
-    }
-    $("#a-text").oninput = () => { const n = $("#a-text").value.trim().length; const el = $("#a-words"); el.textContent = `${n} / ${Q_MAX} characters`; el.classList.toggle("over", n > Q_MAX); };
-
-    $("#compose").onsubmit = async e => {
-      e.preventDefault();
-      const st = $("#a-status");
-      const code = courseSel.value, uni = uniSel2.value, text = $("#a-text").value.trim(), n = text.length;
-      if (!uni) return status(st, "Choose your university.", "err");
-      if (!validCode(code)) return status(st, "Pick a course from the list, or type its code in the search box.", "err");
-      if (n < Q_MIN) return status(st, "Write a bit more so peer mentors know what you're stuck on.", "err");
-      if (n > Q_MAX) return status(st, `Your question is ${n} characters. Cut it to ${Q_MAX} or fewer.`, "err");
-      const fullCost = priceFor(+document.querySelector('input[name="a-count"]:checked').value, $("#a-urgent").checked, isHD());
-      const cost = Number(p.free_questions || 0) > 0 ? Math.max(0, fullCost - 3) : fullCost;
-      if (cost > Number(p.credits || 0)) return status(st, `This question costs ${money(cost)} and you have ${money(Number(p.credits || 0))}. Top up on the Credits page or choose fewer answers.`, "err");
-      const btn = $("#a-post"); btn.disabled = true; status(st, attach ? "Uploading your file…" : "Posting…", "", true);
-      try {
-        let att = {};
-        if (attach) {
-          const path = `${S.user.id}/${Date.now()}-${attach.name.replace(/[^\w.\-]+/g, "_").slice(-80)}`;
-          const { error } = await sb.storage.from("attachments").upload(path, attach, { contentType: attach.type, upsert: false });
-          if (error) throw error;
-          att = { attachment_path: path, attachment_name: attach.name, attachment_type: attach.type, attachment_size: attach.size };
-        }
-        await ensureCourse(uni, code).catch(() => { });
-        const hours = +durSel.value;
-        const row = {
-          asker_id: S.user.id, uni_id: uni, course_code: code, body: text, ...att,
-          min_mark: +document.querySelector('input[name="a-grade"]:checked').value, verified_only: false, wide: !goalsPicked().includes("course_specific"), goals: goalsPicked(), urgent: $("#a-urgent").checked,
-          slots: +document.querySelector('input[name="a-count"]:checked').value,
-          expires_at: new Date(Date.now() + hours * 3600e3).toISOString()
-        };
-        const { data, error } = await sb.from("questions").insert(row).select("id").single();
-        if (error) throw error;
-        await refreshCredits();
-        sb.functions.invoke("notify-tutors", { body: { question_id: data.id } }).catch(() => { });
-        track("post_question", { value: cost, currency: "AUD", answers: row.slots, urgent: row.urgent, hd_only: row.min_mark >= 85 });
-        toast(cost > 0 ? `Question posted. ${money(cost)} used from your credits.` : "Question posted. This one's free!");
-        go("/q/" + data.id);
-      } catch (err) { status(st, errMsg(err), "err"); btn.disabled = false; }
-    };
-    wireRefresh("ref-recent", () => renderRecent($("#recent"), 4));
-    renderRecent($("#recent"), 4);
-    every(8000, () => renderRecent($("#recent"), 4));
-    settle();
-  }
-
-  async function myQuestions(limit) {
-    let q = sb.from("questions").select("id, uni_id, course_code, body, slots, urgent, min_mark, verified_only, expires_at, created_at, attachment_name, answers(id, position, bubbles, tutor_id, created_at)").eq("asker_id", S.user.id).order("created_at", { ascending: false });
-    if (limit) q = q.limit(limit);
-    const { data, error } = await q; if (error) throw error;
-    const ids = [...new Set(data.flatMap(x => (x.answers || []).map(a => a.tutor_id)))];
-    if (ids.length) { const { data: ts } = await sb.from("profiles").select("id, display_name, full_name").in("id", ids); (ts || []).forEach(t => S.names[t.id] = displayName(t)); }
-    return data;
-  }
-  function qSummary(q) {
-    const ans = (q.answers || []).slice().sort((a, b) => a.position - b.position);
-    const n = ans.length, closed = new Date(q.expires_at) < new Date();
-    return `<a class="q-link" href="/q/${q.id}"><article class="q${closed ? " closed" : ""}">
-      <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniShort(q.uni_id))} · ${ago(q.created_at)}</span></span><span class="q-exp${closed ? "" : " live"}">${left(q.expires_at)}</span></div>
-      <p class="q-text">${esc(q.body)}</p>
-      <div class="q-pay"><span class="slotbar">${Array.from({ length: q.slots }, (_, i) => `<i class="${i < n ? "on" : ""}"></i>`).join("")}</span><span>${n} of ${q.slots} answers</span>${q.urgent ? '<span class="tagchip">Urgent</span>' : ""}${q.attachment_name ? '<span class="tagchip">Attachment</span>' : ""}</div>
-      ${ans.length ? `<div class="ans-preview">${ans.map(a => `<div class="ap"><b data-notr>${esc(S.names[a.tutor_id] || "Peer mentor")}</b><span>${esc((a.bubbles || []).join(" ").slice(0, 140))}${(a.bubbles || []).join(" ").length > 140 ? "…" : ""}</span></div>`).join("")}</div>` : ""}
-      ${S.drafting && S.drafting[q.id] ? `<div class="drafting"><span class="spin"></span><span>${esc(S.drafting[q.id].join(", "))} ${S.drafting[q.id].length > 1 ? "are" : "is"} drafting up the answer<span class="dots"></span></span></div>` : ""}
-      <span class="q-open">${n ? "Open to see full answers" : "Open question"} →</span>
-    </article></a>`;
-  }
-  async function renderRecent(el, limit) {
-    if (!el || !el.isConnected) return;
-    const [qs, dr] = await Promise.all([myQuestions(limit), sb.rpc("my_drafting")]);
-    if (!el.isConnected) return;
-    const stamp = el.parentElement && el.parentElement.querySelector("[data-updated]"); if (stamp) { stamp.dataset.updated = Date.now(); stamp.textContent = "Updated just now"; }
-    S.drafting = {}; ((dr && dr.data) || []).forEach(d => { (S.drafting[d.question_id] = S.drafting[d.question_id] || []).push(d.tutor_name); });
-    el.innerHTML = qs.length ? qs.map(qSummary).join("") : `<div class="empty">You haven't asked anything yet.</div>`;
-  }
-  async function pageMyQuestions() {
-    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">My questions</h1><div class="row" style="gap:8px"><span class="muted upd" data-updated></span>${refreshBtn("ref-list")}<a class="btn primary" href="/ask">Ask a question</a></div></div><div class="qgrid" id="list"><div class="boot">Loading…</div></div></section>`;
-    wireRefresh("ref-list", () => renderRecent($("#list")));
-    await renderRecent($("#list"));
-    settle();
-    every(8000, () => renderRecent($("#list")));
-  }
-
-  /* AI transcript scan: animated progress while the scan-transcript function runs (10 to 20 seconds) */
-  function scanAnimation(el) {
-    const STEPS = ["Opening your transcript", "Finding course codes", "Reading marks and grades", "Checking which courses you can mentor"];
-    el.innerHTML = `<div class="scan" role="status" aria-live="polite">
-      <div class="scan-doc" aria-hidden="true">${Array.from({ length: 9 }, (_, i) => `<i style="width:${[80, 55, 70, 62, 76, 48, 68, 58, 72][i]}%"></i>`).join("")}<div class="scan-beam"></div></div>
-      <div class="scan-body"><div class="scan-title"><span class="ai-spark" aria-hidden="true">✦</span> AI is reading your transcript</div>
-        <ul class="scan-steps">${STEPS.map((t, i) => `<li data-s="${i}">${esc(t)}</li>`).join("")}</ul>
-        <div class="scan-bar"><i></i></div><small class="muted">Usually 10 to 20 seconds · <span class="scan-t">0s</span></small></div></div>`;
-    const t0 = Date.now(), bar = el.querySelector(".scan-bar i"), tt = el.querySelector(".scan-t"), lis = [...el.querySelectorAll(".scan-steps li")];
-    const at = [0, 3, 8, 14];
-    const paint = done => {
-      const sec = (Date.now() - t0) / 1000;
-      tt.textContent = Math.floor(sec) + "s";
-      bar.style.width = (done ? 100 : Math.min(94, 94 * (1 - Math.exp(-sec / 9)))) + "%";
-      const cur = done ? STEPS.length : at.filter(x => sec >= x).length - 1;
-      lis.forEach((li, i) => li.className = i < cur ? "done" : i === cur ? "active" : "");
-    };
-    paint(false); const iv = setInterval(() => paint(false), 250);
-    return { finish: ok => new Promise(res => { clearInterval(iv); paint(true); el.querySelector(".scan-title").innerHTML = ok ? '<span class="ai-spark" aria-hidden="true">✦</span> Done. Here\'s what the AI found' : "Scan finished"; setTimeout(() => { el.innerHTML = ""; res(); }, 900); }) };
-  }
-
-  /* ---------------- question detail (student) ---------------- */
-  async function signedUrl(bucket, path) {
-    const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, 3600);
-    if (error) throw error; return data.signedUrl;
-  }
-  async function pageQuestion(id) {
-    app().innerHTML = `<div class="boot">Loading question…</div>`;
-    const { data: q, error } = await sb.from("questions").select("*").eq("id", id).maybeSingle();
-    if (error) throw error;
-    if (!q) { app().innerHTML = `<div class="empty">This question doesn't exist or you don't have access to it.</div>`; return; }
-    const mine = q.asker_id === S.user.id;
-    app().innerHTML = `<section class="view">
-      ${mine ? '<a href="/questions">← My questions</a>' : '<a href="/admin">← Admin</a>'}
-      <div class="answer-layout">
-        <div class="col">
-          <article class="q">
-            <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</span></span><span class="q-exp" data-exp="${q.expires_at}">${left(q.expires_at)}</span></div>
-            <p class="q-text" style="font-size:17px">${esc(q.body)}</p>
-            ${mine && new Date(q.expires_at) > new Date() ? `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">Closes automatically ${left(q.expires_at).replace("Closes in", "in")}. Got what you needed?</span><button class="btn sm" id="close-q">Close question</button></div>` : ""}
-            <div class="q-pay">${[q.urgent ? "Urgent" : null, q.min_mark >= 85 ? "HD only" : "Open to D and HD peer mentors", q.wide === false ? "Your uni only" : "Similar courses included"].filter(Boolean).map(t => `<span class="tagchip">${t}</span>`).join("")}</div>
-            ${(q.goals || []).length ? `<div class="goals-row"><span class="muted">You're after</span>${goalChips(q.goals)}</div>` : ""}
-          </article>
-          ${q.attachment_path ? `<div class="answer-tabs" id="ann-tabs"></div><div id="doc"></div>` : ""}
-        </div>
-        <aside class="answer-side"><div class="results-head"><h2>Answers <span class="muted" id="count" style="font-size:15px;font-weight:500"></span></h2>${refreshBtn("ref-ans")}</div><div id="drafting"></div><div class="col" id="answers"></div></aside>
-      </div></section>`;
-    let doc = null;
-    if (q.attachment_path) {
-      try { doc = await DocView.mount($("#doc"), { url: await signedUrl("attachments", q.attachment_path), type: q.attachment_type, editable: false }); }
-      catch (e) { $("#doc").innerHTML = `<div class="status err">${esc(errMsg(e))}</div>`; }
-    }
-    let shownAnswer = null, lastIds = "";
-    async function loadDrafting() {
-      if (!mine) return;
-      const { data } = await sb.rpc("my_drafting");
-      const names = (data || []).filter(d => d.question_id === id).map(d => d.tutor_name);
-      $("#drafting").innerHTML = names.length ? `<div class="drafting"><span class="spin"></span><span><b>${esc(names.join(", "))}</b> ${names.length > 1 ? "are" : "is"} drafting up the answer<span class="dots"></span></span></div>` : "";
-    }
-    async function load() {
-      loadDrafting();
-      const { data: ans } = await sb.from("answers").select("*").eq("question_id", id).order("position");
-      const answers = ans || [];
-      $("#count").textContent = `${answers.length} of ${q.slots}`;
-      const ids = answers.map(a => a.id).join();
-      if (ids === lastIds && answers.length) return; lastIds = ids;
-      const tutorIds = [...new Set(answers.map(a => a.tutor_id))];
-      const [{ data: tutors }, { data: tcs }, { data: revs }] = await Promise.all([
-        tutorIds.length ? sb.from("profiles").select("id, display_name, full_name, uni_id, equals_verified").in("id", tutorIds) : { data: [] },
-        tutorIds.length ? sb.from("tutor_courses").select("tutor_id, uni_id, code, mark, grade").in("tutor_id", tutorIds).eq("status", "approved") : { data: [] },
-        answers.length ? sb.from("reviews").select("answer_id, stars, comment").in("answer_id", answers.map(a => a.id)) : { data: [] }
-      ]);
-      const tMap = Object.fromEntries((tutors || []).map(t => [t.id, t]));
-      const closed = new Date(q.expires_at) < new Date();
-      $("#answers").innerHTML = answers.length ? answers.map((a, i) => {
-        const t = tMap[a.tutor_id] || {}, tc = (tcs || []).filter(x => x.tutor_id === a.tutor_id);
-        const course = tc.find(x => x.uni_id === q.uni_id && x.code === q.course_code) || tc[0];
-        const rv = (revs || []).find(r => r.answer_id === a.id);
-        const c = DocView.count(a.annotations);
-        return `<div class="answer-card${shownAnswer === a.id ? " active" : ""}" data-a="${a.id}" data-trg>
-          <div class="ans-head"><span class="ord">${["1st", "2nd", "3rd", "4th", "5th"][i]}</span><b data-notr>${esc(displayName(t))}</b>${course ? `<span class="grade">${course.mark}<span class="badge ${gcls(course.grade || gradeFor(course.mark))}">${esc(course.grade || gradeFor(course.mark))}</span></span>` : ""}${course && (course.uni_id !== q.uni_id || course.code !== q.course_code) ? `<span class="simchip"><b>${esc(uniShort(course.uni_id))}</b> ${esc(course.code)}</span>` : ""}${FEATURES.equals && t.equals_verified ? '<span class="eq">✓ My eQuals</span>' : ""}<span class="muted">${ago(a.created_at)}</span></div>
-          <div class="bubbles" data-trslot>${(a.bubbles || []).map(b => `<div class="bubble" data-tr>${esc(b)}</div>`).join("")}</div>
-          ${c.strokes || c.notes ? `<button class="btn sm" data-show="${a.id}">${shownAnswer === a.id ? "Hide" : "Show"} markup on your document (${c.notes} note${c.notes === 1 ? "" : "s"}, ${c.strokes} drawing${c.strokes === 1 ? "" : "s"})</button>` : ""}
-          ${mine ? (rv ? `<div class="muted" style="font-size:13px">You rated ${stars(rv.stars)}</div>` : `<div class="row" style="justify-content:space-between"><span class="stars-in" role="group" aria-label="Rate this answer">${[1, 2, 3, 4, 5].map(n => `<button data-rate="${a.id}:${a.tutor_id}:${n}" aria-label="${n} star${n > 1 ? "s" : ""}">★</button>`).join("")}</span><button class="linkbtn" data-report="${a.id}">Report</button></div>`) : ""}
-        </div>`;
-      }).join("") : `<div class="empty">${closed ? "This question closed without answers." : `<span class="spin"></span> Waiting for answers. ${q.urgent ? "Urgent questions usually get answers within 20 minutes." : "Most questions are answered within an hour."}`}</div>`;
-      window._answers = answers;
-      autoTranslate($("#answers"));
-    }
-    $("#answers").addEventListener("click", async e => {
-      const sh = e.target.closest("[data-show]");
-      if (sh && doc) {
-        const a = (window._answers || []).find(x => x.id === sh.dataset.show);
-        shownAnswer = shownAnswer === a.id ? null : a.id;
-        doc.setAnnotations(shownAnswer ? a.annotations : {});
-        lastIds = ""; await load();
-        if (shownAnswer) $("#doc").scrollIntoView({ behavior: "smooth", block: "start" });
-        return;
-      }
-      const r = e.target.closest("[data-rate]");
-      if (r) {
-        const [answer_id, tutor_id, n] = r.dataset.rate.split(":");
-        openModal(`<h3>Rate this answer ${stars(+n, 20)}</h3><label class="field"><span>Comment (optional)</span><textarea class="prose" id="rv-c" maxlength="300" placeholder="What made it helpful?"></textarea></label><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="rv-go">Submit rating</button></div>`, m => {
-          $("#rv-go", m).onclick = async () => {
-            const { error } = await sb.from("reviews").insert({ answer_id, tutor_id, student_id: S.user.id, stars: +n, comment: $("#rv-c", m).value.trim() || null });
-            if (error) return toast(errMsg(error));
-            closeModal(); toast("Thanks for rating"); lastIds = ""; load();
-          };
-        });
-        return;
-      }
-      const rp = e.target.closest("[data-report]");
-      if (rp) {
-        openModal(`<h3>Report this answer</h3><p class="muted" style="font-size:14px">Tell us what's wrong. We review every report.</p><label class="field"><span>Reason</span><textarea class="prose" id="rp-r" maxlength="500" placeholder="For example: wrong, off-topic, or looks like a copied assignment."></textarea></label><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="rp-go">Send report</button></div>`, m => {
-          $("#rp-go", m).onclick = async () => {
-            const reason = $("#rp-r", m).value.trim(); if (!reason) return toast("Add a short reason.");
-            const { error } = await sb.from("reports").insert({ answer_id: rp.dataset.report, reporter_id: S.user.id, reason });
-            if (error) return toast(errMsg(error)); closeModal(); toast("Report sent. Thanks.");
-          };
-        });
-      }
-    });
-    const cq = $("#close-q");
-    if (cq) cq.onclick = () => openModal(`<h3>Close this question?</h3><p class="muted" style="font-size:14px">Peer mentors won't be able to answer it any more. Answers you've already received stay here, and credits for unanswered spots are refunded to you now.</p><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Keep it open</button><button class="btn primary" id="cq-go">Close question</button></div>`, m => {
-      $("#cq-go", m).onclick = async () => {
-        const { data, error } = await sb.rpc("close_question", { q_id: id });
-        if (error) return toast(errMsg(error));
-        closeModal(); await refreshCredits();
-        toast(Number(data) > 0 ? `Question closed. ${money(Number(data))} refunded to your credits.` : "Question closed.");
-        pageQuestion(id);
-      };
-    });
-    await load();
-    wireRefresh("ref-ans", () => { lastIds = ""; return load(); });
-    every(8000, () => { const el = $("[data-exp]"); if (el) el.textContent = left(el.dataset.exp); if (new Date(q.expires_at) > new Date()) load(); });
-    if (mine) settle();
   }
 
   /* ---------------- auto translation ---------------- */
@@ -818,792 +409,381 @@
     });
   }
 
-  /* ---------------- credits ---------------- */
-  async function pageCredits(result) {
-    await settle(); await refreshCredits();
-    const { data: fset } = await sb.from("app_settings").select("value").eq("key", "free_topups").maybeSingle();
-    const freeMode = !!(fset && String(fset.value) === "true");
-    const { data: tx } = await sb.from("credit_tx").select("*").eq("user_id", S.user.id).order("created_at", { ascending: false }).limit(30);
-    const bal = Number(S.profile.credits || 0);
-    app().innerHTML = `<section class="view"><div class="wallet-grid">
-      <div class="panel">
-        <div class="eyebrow">Your balance</div>
-        <div><span class="balance">${money(bal)}</span> <span class="muted">in credits</span></div>
-        <p class="muted" style="font-size:14px">1 credit = $1. Unanswered spots are refunded when a question closes, and so is the urgent fee for any answer that takes over 20 minutes.</p>
-        <div class="eyebrow" style="margin-top:6px">What questions cost</div>
-        <div class="table-wrap"><table style="min-width:0"><thead><tr><th>Answers</th><th>Standard</th><th>Urgent</th></tr></thead><tbody>
-          ${[2, 3, 5].map(n => `<tr><td>${n} answers</td><td class="num">${money(priceFor(n, false))}</td><td class="num">${money(priceFor(n, true))}</td></tr>`).join("")}
-        </tbody></table></div>
-        ${FEATURES.hdOnly ? `<p class="muted" style="font-size:13px">HD only adds ${money(HD_FEE)} per answer.</p>` : ""}
-        <div class="eyebrow" style="margin-top:6px">Top up</div>
-        <div class="packs">${[[10, "$10", "Starter"], [21, "$20", "+1 bonus credit"], [55, "$50", "+5 bonus credits"]].map(([c, pr, note]) => `<button class="pack" data-topup="${c}"><b>${c}</b><span>credits · ${pr}</span><small>${note}</small></button>`).join("")}</div>
-        <div class="status${result === "paid" ? " ok" : ""}" id="topup-st">${result === "paid" ? "Payment received. Your credits are being added…" : result === "cancelled" ? "Payment cancelled. You weren't charged." : freeMode ? "Test mode: top-ups are free for now and no payment is taken." : "Pay securely by card with Stripe. Credits are added as soon as the payment goes through."}</div>
-        ${S.profile.is_admin ? `<div class="status" style="font-size:13px"><b>Admin test mode:</b> your checkouts use Stripe's test mode. Pay with card <span class="mono">4242 4242 4242 4242</span>, any future expiry and any CVC. No real money is taken.</div>` : ""}
+  /* ---------------- forum: list, search and browse ---------------- */
+  const forumUrl = f => {
+    const q = new URLSearchParams();
+    if (f.uni) q.set("uni", f.uni);
+    if (f.uni && f.course) q.set("course", f.course);
+    if (f.q) q.set("q", f.q);
+    if (f.sort && f.sort !== "new") q.set("sort", f.sort);
+    const s = q.toString();
+    return "/" + (s ? "?" + s : "");
+  };
+  const SORTS = [["new", "Newest"], ["active", "Active"], ["top", "Top"], ["unanswered", "Unanswered"]];
+
+  function postCard(p) {
+    const done = !!p.accepted_reply;
+    return `<a class="post-card" href="/p/${p.id}" data-trg>
+      <div class="pc-stats" aria-hidden="true"><span><b>${p.score}</b>${p.score === 1 ? "vote" : "votes"}</span><span class="pc-ans${p.reply_count ? " has" : ""}${done ? " done" : ""}"><b>${p.reply_count}</b>${p.reply_count === 1 ? "answer" : "answers"}</span></div>
+      <div class="pc-main">
+        <div class="pc-tags"><span class="q-code" data-notr>${esc(p.course_code)}</span><span class="tagchip" data-notr>${esc(uniShort(p.uni_id))}</span>${done ? '<span class="best-chip">✓ Answered</span>' : ""}${p.removed ? '<span class="status-pill rejected">Removed</span>' : ""}</div>
+        <h3 class="pc-title" data-tr>${esc(p.title)}</h3>
+        <p class="pc-snip" data-tr>${esc(snippet(p.body, 180))}</p>
+        <div class="pc-meta"><span data-notr>${esc(p.author_name || "Student")}</span> · ${ago(p.created_at)} · <span class="sr-only">${plural(p.score, "vote")}, ${plural(p.reply_count, "answer")}</span></div>
+      </div></a>`;
+  }
+
+  async function pageForum() {
+    const qs = new URLSearchParams(location.search);
+    const F = { uni: S.uniMap[qs.get("uni")] ? qs.get("uni") : "", course: (qs.get("course") || "").toUpperCase().replace(/[^A-Z0-9]/g, ""), q: (qs.get("q") || "").trim().slice(0, 120), sort: SORTS.some(s => s[0] === qs.get("sort")) ? qs.get("sort") : "new" };
+    if (!F.uni) F.course = "";
+    const landing = !S.user && !F.uni && !F.q;
+    const heading = F.course ? `<span data-notr>${esc(F.course)}</span> <span class="muted" style="font-weight:500">at ${esc(uniShort(F.uni))}</span>` : F.uni ? `<span data-notr>${esc(uniName(F.uni))}</span>` : F.q ? "Search results" : "All questions";
+    app().innerHTML = `<section class="view forum">
+      ${landing ? `<div class="forum-hero">
+        <p class="tagline">Let's succeed as a generation.</p>
+        <h1>Ask about any course. Get answers from students who've <em>done it</em>.</h1>
+        <p class="muted">A free Q&amp;A forum for Australian uni students. Search questions by uni and course, or post your own. Anyone can answer.</p>
+        <div class="cta-row"><a class="btn primary" href="/ask">Ask a question</a><a class="btn" href="/signup">Create a free account</a></div>
+      </div>` : ""}
+      <form class="filters" id="ff" role="search">
+        <label class="search-box"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input type="search" id="f-q" value="${esc(F.q)}" placeholder="Search questions, e.g. pointers, IRAC, normalisation" aria-label="Search questions" maxlength="120"></label>
+        <div id="f-uni" class="f-sel" aria-label="University"></div>
+        <div id="f-course" class="f-sel" aria-label="Course"></div>
+        <button class="btn primary" id="f-go">Search</button>
+      </form>
+      <div class="forum-layout">
+        <div class="col">
+          <div class="results-head"><h1 class="forum-title">${heading}</h1>${(F.uni || F.q) ? `<a href="/" class="muted" style="font-size:14px">Clear filters</a>` : ""}</div>
+          ${F.course ? `<p class="muted" id="course-title" style="margin-top:-8px"></p>` : ""}
+          <div class="row" style="justify-content:space-between"><div class="seg sorts" role="radiogroup" aria-label="Sort">${SORTS.map(([v, l]) => `<label><input type="radio" name="sort" value="${v}" ${F.sort === v ? "checked" : ""}><span>${l}</span></label>`).join("")}</div><span class="muted" id="count" style="font-size:13px"></span></div>
+          <div class="col" id="list"><div class="boot">Loading…</div></div>
+          <div class="row" style="justify-content:center"><button class="btn" id="more" hidden>Load more</button></div>
+        </div>
+        <aside class="col forum-side" id="side"></aside>
       </div>
-      <div class="panel"><div class="eyebrow">History</div>
-        <ul class="list">${(tx || []).map(t => `<li><span>${esc(t.label)} <span class="muted" style="font-size:12px">${ago(t.created_at)}</span></span><span class="amt ${t.amount > 0 ? "pos" : ""}">${t.amount > 0 ? "+" : ""}${money(Number(t.amount))}</span></li>`).join("") || '<li class="muted">No activity yet.</li>'}</ul>
-      </div></div></section>`;
-    $$("[data-topup]").forEach(b => b.onclick = async () => {
-      b.disabled = true;
-      if (freeMode) {
-        const { error } = await sb.rpc("test_topup", { p_credits: +b.dataset.topup });
-        b.disabled = false;
-        if (error) return status($("#topup-st"), errMsg(error), "err");
-        toast(`Added ${b.dataset.topup} credits`);
-        return pageCredits();
-      }
-      status($("#topup-st"), "Opening secure checkout…", "", true);
-      const { data, error } = await sb.functions.invoke("create-checkout", { body: { pack: b.dataset.topup } });
-      if (!error && data && data.url) { try { sessionStorage.setItem("pending-pack", b.dataset.topup); } catch (_) { } if (!data.test) track("begin_checkout", { value: { 10: 10, 21: 20, 55: 50 }[b.dataset.topup], currency: "AUD" }); location.href = data.url; return; }
-      b.disabled = false;
-      let msg = "Couldn't start the payment. Try again in a moment.";
-      try { const j = error && error.context && await error.context.json(); if (j && j.error === "not_configured") msg = "Card payments aren't switched on yet."; else if (j && j.error) msg = j.error; } catch (_) { }
-      status($("#topup-st"), msg, "err");
-    });
-    // Back from Stripe: the webhook adds the credits within a few seconds
-    if (result === "paid") {
-      try { const pk = sessionStorage.getItem("pending-pack"); if (pk && !S.profile.is_admin) { sessionStorage.removeItem("pending-pack"); const v = { 10: 10, 21: 20, 55: 50 }[pk]; track("purchase", { value: v, currency: "AUD", transaction_id: "topup-" + Date.now(), items: [{ item_id: "credits-" + pk, item_name: pk + " credits", price: v, quantity: 1 }] }); } } catch (_) { }
-      const start = Number(S.profile.credits || 0); let tries = 0;
-      const iv = setInterval(async () => {
-        tries++; await refreshCredits();
-        if (Number(S.profile.credits || 0) > start || tries > 10) { clearInterval(iv); if (curPath().startsWith("/credits")) { history.replaceState(null, "", "/credits"); pageCredits(); } }
-      }, 2000);
-      S.timers.push(iv);
-    }
-  }
+      ${landing ? FAQ : ""}
+    </section>`;
 
-  /* One-click unsubscribe from an alert email */
-  async function pageAlertsOff(uid, token) {
-    app().innerHTML = `<div class="boot">Turning off email alerts…</div>`;
-    const { data, error } = await sb.rpc("unsubscribe_alerts", { p_user: uid, p_token: token });
-    if (S.user && S.user.id === uid && data) await loadProfile();
-    app().innerHTML = `<div class="medium"><div class="panel pending-card">${!error && data
-      ? `<span class="status-pill approved">Done</span><h1 style="font-size:26px">Email alerts are off</h1><p class="muted">You won't get emails about new questions any more. You can turn them back on from your peer mentor profile whenever you like.</p>`
-      : `<span class="status-pill rejected">Link didn't work</span><h1 style="font-size:26px">We couldn't turn off alerts from this link</h1><p class="muted">Log in and switch off email alerts on your peer mentor profile instead.</p>`}
-      <a class="btn" href="/tutor">Go to peer mentor profile</a></div></div>`;
-  }
+    // Filters
+    const apply = patch => go(forumUrl({ ...F, ...patch }));
+    glassSelect($("#f-uni"), { options: [{ value: "", label: "All universities" }, ...uniOpts()], value: F.uni, placeholder: "All universities", search: "Search universities", hideSub: true, onChange: v => apply({ uni: v || "", course: "" }) });
+    const courseList = await coursesFor(F.uni);
+    const cOpts = [{ value: "", label: "All courses" }, ...courseOpts(courseList)];
+    if (F.course && !courseList.some(c => c.code === F.course)) cOpts.push({ value: F.course, label: F.course });
+    glassSelect($("#f-course"), { options: F.uni ? cOpts : [], value: F.uni ? F.course : null, placeholder: F.uni ? "All courses" : "Choose a uni first", search: "Search or type a course code", mono: true, freeText: c => !!F.uni && validCode(c), emptyText: F.uni ? "No matches. Type the full course code." : "Choose a university first.", hideSub: true, onChange: v => apply({ course: v || "" }) });
+    if (F.course && $("#course-title")) { const c = courseList.find(x => x.code === F.course); $("#course-title").textContent = c && c.title ? c.title : ""; }
+    $("#ff").onsubmit = e => { e.preventDefault(); apply({ q: $("#f-q").value.trim() }); };
+    document.querySelectorAll('input[name="sort"]').forEach(r => r.onchange = () => apply({ sort: r.value }));
 
-  /* Warning shown when an answer looks AI-written */
-  function aiWarning(score) {
-    openModal(`<h3>⚠ This answer looked AI-written</h3>
-      <p style="font-size:14px">Our check rated your last answer <b>${score}% likely to be AI-generated</b>. Answers on Distinction must be your own words, typed by you.</p>
-      <p class="muted" style="font-size:14px">The answer was still sent and paid, but it's been flagged. <b>3 flags within 30 days pauses your mentoring</b> until we review it.</p>
-      <div class="row" style="justify-content:flex-end"><button class="btn primary" data-close id="ai-ok">I understand</button></div>`, m => { $("#ai-ok", m).addEventListener("click", () => sb.rpc("dismiss_ai_warnings")); });
-  }
-
-  /* Ask peer mentors (once) whether they want emails about new questions */
-  function askAlerts() {
-    openModal(`<h3>Get an email when a question comes in?</h3>
-      <p class="muted" style="font-size:14px">We'll email ${esc(S.user.email)} when a student asks a question in one of your courses, so you don't have to keep checking the site. First to claim gets the spot. At most one email every few minutes, and you can turn this off anytime.</p>
-      <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="al-no">Not now</button><button class="btn primary" id="al-yes">Yes, email me</button></div>`, m => {
-      const set = async on => { try { await saveProfile({ email_alerts: on, alerts_asked: true, email_alerts_at: on ? new Date().toISOString() : null }); closeModal(); toast(on ? "Email alerts are on" : "No problem. You can turn alerts on from your peer mentor profile."); if ($("#al-toggle")) $("#al-toggle").checked = on; } catch (e) { toast(errMsg(e)); } };
-      $("#al-yes", m).onclick = () => set(true);
-      $("#al-no", m).onclick = () => set(false);
-    });
-  }
-
-  /* ---------------- peer mentor ---------------- */
-  async function pageTutor() {
-    const p = S.profile;
-    if (!p.onboarded || p.tutor_status === "none") return tutorPitch();
-    if (p.tutor_status === "pending") return tutorPending();
-    if (p.tutor_status === "rejected") return tutorRejected();
-    if (p.tutor_paused) return tutorPaused();
-    return tutorDashboard();
-  }
-  function tutorPitch() {
-    app().innerHTML = `<section class="view"><div class="intro"><div>
-      <h1>Get paid to answer questions you already know.</h1>
-      <p>Upload your transcript and our AI reads your marks in about 20 seconds. Every course where you got a Distinction (75+) or High Distinction becomes a course you can mentor, straight away. Earn $1 to $2 for every 2-minute answer, or roughly $33 to $51 an hour while you're answering. Turn on email alerts and answer between classes.</p>
-      <div class="cta-row"><a class="btn primary" href="/tutor/apply">Apply to be a peer mentor</a></div></div>
-      <div class="how"><div><span class="stepno">STEP 1</span><b>Profile</b><p>Your uni, degree and a short intro.</p></div><div><span class="stepno">STEP 2</span><b>Transcript</b><p>Upload it. AI reads your courses and marks, then the file is deleted.</p></div><div><span class="stepno">STEP 3</span><b>Start mentoring</b><p>Approved instantly for every course at 75 or above.</p></div></div>
-    </div></section>`;
-  }
-  async function tutorPending() {
-    const { data: tcs } = await sb.from("tutor_courses").select("*").eq("tutor_id", S.user.id).order("mark", { ascending: false });
-    app().innerHTML = `<div class="medium"><div class="panel pending-card"><span class="status-pill pending">Under review</span><h1 style="font-size:28px">We're checking your transcript</h1>
-      <p class="muted">We'll approve your courses once we've matched them to your transcript, usually within 48 hours. You can keep asking questions in the meantime.</p>
-      <ul class="courses" style="width:100%">${(tcs || []).map(x => `<li><span class="code">${esc(x.code)}</span><span class="ttl">${esc(x.title)}</span><span class="grade">${x.mark}<span class="badge ${gcls(x.grade || gradeFor(x.mark))}">${esc(x.grade || gradeFor(x.mark))}</span></span></li>`).join("")}</ul>
-      <a class="btn" href="/ask">Ask a question</a></div></div>`;
-  }
-  async function tutorRejected() {
-    const { data: apps } = await sb.from("tutor_applications").select("admin_notes, reviewed_at").eq("user_id", S.user.id).order("submitted_at", { ascending: false }).limit(1);
-    app().innerHTML = `<div class="medium"><div class="panel pending-card"><span class="status-pill rejected">Not approved</span><h1 style="font-size:28px">Your application was rejected</h1>
-      ${apps && apps[0] && apps[0].admin_notes ? `<p>${esc(apps[0].admin_notes)}</p>` : `<p class="muted">We couldn't match your courses to your transcript.</p>`}
-      <a class="btn primary" href="/tutor/apply">Apply again</a></div></div>`;
-  }
-
-  function tutorPaused() {
-    app().innerHTML = `<div class="medium"><div class="panel pending-card"><span class="status-pill rejected">Mentoring paused</span><h1 style="font-size:28px">Your mentoring is paused</h1>
-      <p>Three of your answers in the last 30 days were flagged as likely AI-written, so you can't see or claim questions for now. Answers on Distinction must be your own words, typed by you.</p>
-      <p class="muted">Think this is a mistake? Email <a href="mailto:support@hdistinction.live">support@hdistinction.live</a> and we'll review your answers. Your earnings so far are safe, and you can still ask questions.</p>
-      <a class="btn" href="/ask">Ask a question</a></div></div>`;
-  }
-
-  async function tutorDashboard() {
-    const p = S.profile;
-    app().innerHTML = `<div class="boot">Loading your peer mentor profile…</div>`;
-    const [{ data: st }, { data: tcs }, { data: revs }] = await Promise.all([
-      sb.rpc("tutor_stats", { t: S.user.id }),
-      sb.from("tutor_courses").select("*").eq("tutor_id", S.user.id).eq("status", "approved").order("mark", { ascending: false }),
-      sb.from("reviews").select("stars, comment, created_at, student_id").eq("tutor_id", S.user.id).order("created_at", { ascending: false }).limit(8)
-    ]);
-    const s = (st && st[0]) || {};
-    app().innerHTML = `<div class="tutor-layout">
-      <aside class="col">
-        <div class="panel prof">
-          <div class="t-head"><div class="avatar lg" aria-hidden="true">${esc(initials(p.full_name))}</div>
-            <div style="min-width:0"><h2 style="font-size:22px" data-notr>${esc(displayName(p))}</h2><div class="t-meta">${esc(uniName(p.uni_id))}</div><div class="t-meta">${esc(p.degree || "")}</div>
-            ${FEATURES.equals && p.equals_verified ? '<div class="verified">✓ Verified with My eQuals</div>' : '<div class="verified" style="color:var(--muted)">Transcript checked by AI</div>'}</div></div>
-          <div class="rating-row"><span class="rating-big">${s.reviews_count ? Number(s.rating).toFixed(1) : "New"}</span><div>${stars(Number(s.rating || 0), 20)}<div class="muted" style="font-size:13px">${s.reviews_count || 0} review${s.reviews_count === 1 ? "" : "s"}</div></div></div>
-          <div class="stats"><div><b>${s.answers_count || 0}</b><span>Answers</span></div><div><b>${money(Number(s.earned || 0))}</b><span>Earned</span></div><div><b>${s.answers_count ? Math.round((s.urgent_count || 0) / s.answers_count * 100) + "%" : "—"}</b><span>Early bird</span></div></div>
-          ${p.bio ? `<p style="font-size:14px">${esc(p.bio)}</p>` : `<a href="/profile">Add a short intro</a>`}
-        </div>
-        <div class="panel" style="gap:8px"><h3 style="font-size:18px">Question alerts</h3>
-          <label class="check"><input type="checkbox" id="al-toggle" ${p.email_alerts ? "checked" : ""}><span>Email me at <b>${esc(S.user.email)}</b> when a question comes in for my courses</span></label>
-          <small class="muted">Be first to claim it. At most one email every few minutes.</small></div>
-        ${!FEATURES.equals || p.equals_verified ? "" : `<div class="panel" style="gap:10px"><h3 style="font-size:18px">Get the ✓ My eQuals checkmark</h3>
-          <p class="muted" style="font-size:14px">${p.myequals_link ? "Thanks. We're checking your link and will add the checkmark once it matches your transcript." : "Share your transcript from My eQuals and paste the link. Verified peer mentors stand out to students."}</p>
-          <div class="row"><input type="url" id="eq-link" value="${esc(p.myequals_link || "")}" placeholder="https://www.myequals.edu.au/…" style="flex:1;min-width:180px"><button class="btn sm" id="eq-save">${p.myequals_link ? "Update" : "Save link"}</button></div>
-          <details><summary style="cursor:pointer;font-size:13px">How do I get a My eQuals link?</summary><ol style="margin:8px 0 0;padding-left:20px;font-size:13px;display:flex;flex-direction:column;gap:4px"><li>Order an official transcript from your uni. At UNSW, current students pay $20 and it's ready within 5 working days.</li><li>Open the email from My eQuals and sign in at myequals.edu.au.</li><li>Open your transcript, choose Share, then Public link (no PIN), with at least 30 days' expiry.</li><li>Copy the link and paste it here.</li></ol></details>
-          <div id="eq-st" hidden></div></div>`}
-        <div class="panel" style="gap:10px"><div class="row" style="justify-content:space-between"><h3 style="font-size:18px">Courses I can mentor</h3><a href="/tutor/apply">Add courses</a></div>
-          <ul class="courses">${(tcs || []).map(x => `<li><span class="code">${esc(x.code)}</span><span class="ttl" title="${esc(x.title)}">${esc(x.title)}</span><span class="grade">${x.mark}<span class="badge ${gcls(x.grade || gradeFor(x.mark))}">${esc(x.grade || gradeFor(x.mark))}</span></span></li>`).join("")}</ul>
-          <small class="muted">You'll see questions in these courses and in similar courses at any uni.</small></div>
-        <div class="panel" style="gap:4px"><h3 style="font-size:18px;margin-bottom:6px">Reviews</h3>
-          ${(revs || []).length ? revs.map(v => `<div class="review"><div class="row" style="justify-content:space-between">${stars(v.stars)}<span class="muted" style="font-size:12px">${ago(v.created_at)}</span></div>${v.comment ? `<p style="font-size:14px">${esc(v.comment)}</p>` : ""}</div>`).join("") : `<p class="muted" style="font-size:14px">Reviews from students you help will appear here.</p>`}</div>
-      </aside>
-      <div class="col">
-        <div class="earn-strip"><div><div class="eyebrow" style="color:inherit;opacity:.7">Earned so far</div><div class="earn-amt">${money(Number(s.earned || 0))}</div></div>
-          <div class="earn-rules"><span><b>$1–2</b> per answer</span><span class="ebr">Early bird questions pay the most</span></div>
-          <div class="withdraw"><div><div class="eyebrow" style="color:inherit;opacity:.7">Available to withdraw</div><div class="earn-amt" id="avail">…</div><small id="w-note" style="opacity:.8"></small></div><button class="btn" id="w-btn" disabled>Withdraw</button></div></div>
-        <div class="pitch"><div class="pitch-main"><span class="eyebrow">Your earning potential</span><div class="pitch-big"><b>$1–2</b> every 2 minutes</div><p>Questions are 300 characters or less, and you get 2 minutes to answer once you claim one. That's roughly $33 to $51 an hour while you're answering. Look for the early bird tag for the top rate, and turn on email alerts to answer from your phone between classes.</p><div class="pitch-now">This week: <b>${s.week_count || 0}</b> answer${s.week_count === 1 ? "" : "s"}</div></div>
-          <div class="goals"><div class="goal"><div class="row" style="justify-content:space-between"><b>Weekly goal</b><span class="mono">${Math.min(20, s.week_count || 0)}/20</span></div><div class="meter"><i style="width:${Math.min(100, (s.week_count || 0) * 5)}%"></i></div><small>Answer 20 questions this week to hit your goal.</small></div></div></div>
-        <div class="tutor-tips" role="note"><b>Before you claim</b><ul><li>Only claim questions you're confident answering. You'll have 2 minutes, and students rate every answer.</li><li>Answer in your own words. AI-written answers are flagged, and repeated flags pause your mentoring.</li></ul></div>
-        <div id="ai-banner"></div>
-        <a class="my-answers-link" href="/tutor/answers"><span><b>Your answers</b><span class="muted"> · ${s.answers_count || 0} so far</span></span><span>View all →</span></a>
-        <div class="results-head"><h2>Ready to claim</h2><span class="muted" style="font-size:13px">You can hold one question at a time</span></div>
-        <label class="check more-toggle"><input type="checkbox" id="feed-more"><span><b>Show more questions</b> from related courses (same subject area). Only claim the ones you're confident answering: students rate every answer.</span></label>
-        <div class="col" id="feed"><div class="boot" style="min-height:80px">Loading questions…</div></div>
-        <div class="results-head" id="done-head" hidden><h2>Answered recently</h2><a href="/tutor/answers" style="font-size:13px">All your answers →</a></div>
-        <div class="col" id="feed-done"></div>
-      </div></div>`;
-    $("#al-toggle").onchange = async e => { const on = e.target.checked; try { await saveProfile({ email_alerts: on, alerts_asked: true, email_alerts_at: on ? new Date().toISOString() : null }); toast(on ? "Email alerts are on" : "Email alerts are off"); } catch (err) { e.target.checked = !on; toast(errMsg(err)); } };
-    if (!p.alerts_asked) setTimeout(askAlerts, 600);
-    sb.from("answer_checks").select("ai_score, created_at").eq("flagged", true).eq("seen", false).order("created_at", { ascending: false }).then(({ data }) => {
-      if (!data || !data.length || !$("#ai-banner")) return;
-      $("#ai-banner").innerHTML = `<div class="status err ai-banner"><span><b>${data.length === 1 ? "One of your answers" : data.length + " of your answers"} looked AI-written</b> (up to ${Math.max(...data.map(x => x.ai_score))}%). Answers must be your own words. 3 flags within 30 days pauses your mentoring.</span><button class="btn sm" id="ai-dismiss">Got it</button></div>`;
-      $("#ai-dismiss").onclick = async () => { await sb.rpc("dismiss_ai_warnings"); $("#ai-banner").innerHTML = ""; };
-    });
-    const eqSave = $("#eq-save");
-    if (eqSave) eqSave.onclick = async () => {
-      const link = $("#eq-link").value.trim();
-      if (link && !/^https:\/\/([\w-]+\.)*myequals\.(edu\.au|net|org)\//i.test(link)) return status($("#eq-st"), "That doesn't look like a My eQuals link.", "err");
-      try { await saveProfile({ myequals_link: link || null }); status($("#eq-st"), link ? "Saved. We'll check it and add your checkmark." : "Link removed.", "ok"); } catch (e) { status($("#eq-st"), errMsg(e), "err"); }
-    };
-    loadWithdraw();
-    const mt = $("#feed-more");
-    try { mt.checked = localStorage.getItem("feed-more") === "1"; } catch (_) { }
-    mt.onchange = () => { try { localStorage.setItem("feed-more", mt.checked ? "1" : "0"); } catch (_) { } if (mt.checked) toast("Showing more questions. Only claim ones you're confident answering.", 4000); renderFeed(); };
-    await renderFeed();
-    every(20000, renderFeed);
-    $("#feed").addEventListener("click", async e => {
-      const c = e.target.closest("[data-claim]");
-      if (c) {
-        c.disabled = true;
-        const { error } = await sb.rpc("claim_question", { q_id: c.dataset.claim });
-        if (error) { toast(errMsg(error), 5000); c.disabled = false; return renderFeed(); }
-        go("/answer/" + c.dataset.claim);
-      }
-    });
-  }
-  /* Peer mentor's answer history */
-  async function pageMyAnswers() {
-    if (!S.profile || S.profile.tutor_status !== "approved") { go("/tutor"); return; }
-    app().innerHTML = `<section class="view"><a href="/tutor">← Peer mentor dashboard</a><div class="results-head"><h1 style="font-size:30px">Your answers</h1></div><div class="col" id="ma-list"><div class="boot">Loading…</div></div><div class="row" style="justify-content:center"><button class="btn" id="ma-more" hidden>Load more</button></div></section>`;
-    let offset = 0; const PAGE = 20;
+    // Results
+    let off = 0;
     async function load() {
-      const { data, error } = await sb.rpc("my_answers", { p_limit: PAGE, p_offset: offset });
-      const list = $("#ma-list"); if (!list) return;
-      if (error) { list.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
-      if (offset === 0) list.innerHTML = "";
-      if (!data.length && offset === 0) { list.innerHTML = `<div class="empty">You haven't answered any questions yet. <a href="/tutor">Find one to answer</a></div>`; return; }
-      list.insertAdjacentHTML("beforeend", data.map(a => `<article class="q my-ans" data-trg>
-        <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(a.course_code)}</span><span class="q-time">${esc(uniShort(a.uni_id))} · ${ago(a.answered_at)}</span></span><span class="row" style="gap:6px">${a.early_bird ? '<span class="tagchip">Early bird</span>' : ""}<b class="mono">${money(Number(a.payout))}</b></span></div>
-        <div data-trslot><p class="q-text" data-tr>${esc(a.question)}</p></div>
-        <div class="ans"><div class="ans-head"><span class="ord">${["1st", "2nd", "3rd", "4th", "5th"][a.answer_order - 1] || ""}</span><b>Your answer</b>${a.notes ? `<span class="muted" style="font-size:12px">+ ${a.notes} mark${a.notes === 1 ? "" : "s"} on the document</span>` : ""}</div>
-          <div class="bubbles">${(a.bubbles || []).map(b => `<div class="bubble">${esc(b)}</div>`).join("")}</div></div>
-        ${a.stars ? `<div class="review-line">${stars(a.stars)}${a.review ? `<span>“${esc(a.review)}”</span>` : ""}</div>` : `<div class="muted" style="font-size:13px">Not rated yet</div>`}
-      </article>`).join(""));
-      autoTranslate(list);
-      offset += data.length;
-      $("#ma-more").hidden = data.length < PAGE;
+      let q = sb.from("forum_posts").select(POST_COLS, { count: "exact" }).eq("removed", false);
+      if (F.uni) q = q.eq("uni_id", F.uni);
+      if (F.course) q = q.eq("course_code", F.course);
+      if (F.q) q = q.textSearch("search", F.q, { type: "websearch", config: "english" });
+      if (F.sort === "unanswered") q = q.eq("reply_count", 0);
+      q = F.sort === "top" ? q.order("score", { ascending: false }).order("created_at", { ascending: false })
+        : F.sort === "active" ? q.order("last_activity", { ascending: false })
+          : q.order("created_at", { ascending: false });
+      const { data, count, error } = await q.range(off, off + PAGE - 1);
+      if (error) { $("#list").innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
+      if (!off) $("#list").innerHTML = "";
+      $("#list").insertAdjacentHTML("beforeend", data.map(postCard).join(""));
+      if (!off && !data.length) {
+        $("#list").innerHTML = `<div class="empty empty-cta"><b>${F.q ? "No questions match that search." : F.course ? `No questions in ${esc(F.course)} yet.` : F.uni ? `No questions at ${esc(uniShort(F.uni))} yet.` : "No questions yet."}</b><span>Be the first to ask. Someone who's done the course can answer.</span><a class="btn primary" href="/ask${F.uni ? `?uni=${encodeURIComponent(F.uni)}${F.course ? `&course=${encodeURIComponent(F.course)}` : ""}` : ""}">Ask a question</a></div>`;
+      }
+      off += data.length;
+      $("#count").textContent = count ? plural(count, "question") : "";
+      $("#more").hidden = off >= (count || 0);
+      autoTranslate($("#list"));
     }
-    $("#ma-more").onclick = load;
+    $("#more").onclick = async () => { $("#more").disabled = true; await load(); $("#more").disabled = false; };
     await load();
+    renderSide(F);
   }
 
-  /* Withdrawals: $20 minimum, paid by PayID */
-  async function loadWithdraw() {
-    const [{ data: b }, { data: reqs }] = await Promise.all([
-      sb.rpc("tutor_balance"),
-      sb.from("payout_requests").select("id, amount, payid, payid_name, status, admin_note, created_at, paid_at").eq("tutor_id", S.user.id).order("created_at", { ascending: false }).limit(5)
+  async function renderSide(F) {
+    const side = $("#side"); if (!side) return;
+    const rules = `<div class="panel side-rules"><h3>Forum rules</h3><ul>
+      <li>Ask to understand: concepts, course content, how to study, what a unit is like.</li>
+      <li>Don't post questions from an assignment, quiz or exam that's still open, and don't share full solutions.</li>
+      <li>Be kind, and keep personal details out of posts.</li></ul></div>`;
+    if (F.uni) {
+      const { data } = await sb.rpc("forum_courses", { p_uni: F.uni });
+      side.innerHTML = `<div class="panel side-list"><h3>Courses at <span data-notr>${esc(uniShort(F.uni))}</span></h3>${data && data.length ? `<ul>${data.map(c => `<li><a href="${forumUrl({ uni: F.uni, course: c.course_code })}" ${c.course_code === F.course ? 'aria-current="page"' : ""}><span class="mono" data-notr>${esc(c.course_code)}</span><span class="side-sub">${esc(c.title || "")}</span><b>${c.posts}</b></a></li>`).join("")}</ul>` : `<p class="muted" style="font-size:14px">No questions here yet.</p>`}</div>${rules}`;
+    } else {
+      const { data } = await sb.rpc("forum_unis");
+      side.innerHTML = `<div class="panel side-list"><h3>Browse by university</h3>${data && data.length ? `<ul>${data.map(u => `<li><a href="${forumUrl({ uni: u.uni_id })}"><span data-notr>${esc(uniName(u.uni_id))}</span><b>${u.posts}</b></a></li>`).join("")}</ul>` : `<p class="muted" style="font-size:14px">No questions yet.</p>`}<p class="muted" style="font-size:13px">Or pick any university in the filter above.</p></div>${rules}`;
+    }
+  }
+
+  const FAQ = `<div class="faq"><h2>Common questions</h2>
+    <details class="faq-item"><summary>Is it free?</summary><p>Yes. Reading is open to everyone, and posting questions and answers is free with an account.</p></details>
+    <details class="faq-item"><summary>Who answers?</summary><p>Any student with an account. Upvotes show which answers other students found useful, and whoever asked can mark the best answer. Answers come from students, so check anything important against your course materials.</p></details>
+    <details class="faq-item"><summary>Can I post my assignment question?</summary><p>No. Distinction is for understanding a topic, not getting answers to hand in. Don't post questions from an assignment, quiz or exam that's still open, and don't share full solutions. Posts that break this rule are removed, and every post is public. Always follow your university's academic integrity rules.</p></details>
+    <details class="faq-item"><summary>What's shown about me?</summary><p>Your display name and university appear next to your posts. Your email and full name aren't shown.</p></details>
+    <details class="faq-item"><summary>Can I read and post in another language?</summary><p>Yes. Choose your language in your profile and the site switches to it. Posts written in other languages are translated for you automatically, with a Show original button.</p></details>
+  </div>`;
+
+  /* ---------------- a single post and its answers ---------------- */
+  const voteBtn = (kind, id, score, on, own) => `<button type="button" class="vote-btn${on ? " on" : ""}" data-vote="${kind}:${id}" aria-pressed="${on}" ${own ? 'disabled title="You can\'t upvote your own post"' : ""} aria-label="Upvote, ${score} so far"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2l4.5 6h-9z" fill="currentColor"/></svg><b>${score}</b></button>`;
+
+  async function pagePost(id) {
+    if (!/^[0-9a-f-]{36}$/i.test(id || "")) { app().innerHTML = `<div class="empty">Post not found. <a href="/">Back to the forum</a></div>`; return; }
+    const [{ data: p, error }, { data: reps }] = await Promise.all([
+      sb.from("forum_posts").select("*").eq("id", id).maybeSingle(),
+      sb.from("forum_replies").select("*").eq("post_id", id).order("created_at")
     ]);
-    const bal = (b && b[0]) || { available: 0, pending: 0 };
-    const avail = Number(bal.available || 0), pending = (reqs || []).find(r => r.status === "pending");
-    if (!$("#avail")) return;
-    $("#avail").textContent = money(avail);
-    const rej = (reqs || [])[0] && reqs[0].status === "rejected" ? reqs[0] : null;
-    $("#w-note").textContent = rej && !pending ? `Your last request of ${money(Number(rej.amount))} wasn't paid${rej.admin_note ? `: ${rej.admin_note}` : ""}. It's back in your balance.` : pending ? `${money(Number(pending.amount))} on its way to your PayID` : avail >= 20 ? "Paid to your bank by PayID" : `Withdraw once you reach $20 (${money(Math.max(0, 20 - avail))} to go)`;
-    const btn = $("#w-btn"); btn.disabled = !!pending || avail < 20;
-    btn.onclick = () => {
-      const last = (reqs || [])[0] || {};
-      openModal(`<h3>Withdraw your earnings</h3>
-        <p class="muted" style="font-size:14px">We pay withdrawals by PayID, usually within 3 business days. The minimum is $20.</p>
-        <label class="field"><span>Amount</span><input type="number" id="w-amt" min="20" max="${avail}" step="0.01" value="${avail.toFixed(2)}"><small class="muted">Up to ${money(avail)}</small></label>
-        <label class="field"><span>PayID</span><input type="text" id="w-id" maxlength="120" value="${esc(last.payid || "")}" placeholder="Phone number, email or ABN linked to your bank"></label>
-        <label class="field"><span>Name on your PayID</span><input type="text" id="w-name" maxlength="120" value="${esc(last.payid_name || S.profile.full_name || "")}" placeholder="As shown by your bank"></label>
-        <div id="w-st" hidden></div>
-        <div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="w-go">Request withdrawal</button></div>`, m => {
-        $("#w-go", m).onclick = async () => {
-          const amount = Math.round(Number($("#w-amt", m).value) * 100) / 100;
-          if (!(amount >= 20)) return status($("#w-st", m), "The minimum withdrawal is $20.", "err");
-          if (amount > avail) return status($("#w-st", m), `You can withdraw up to ${money(avail)}.`, "err");
-          $("#w-go", m).disabled = true; status($("#w-st", m), "Sending your request…", "", true);
-          const { data, error } = await sb.functions.invoke("payout-request", { body: { amount, payid: $("#w-id", m).value.trim(), name: $("#w-name", m).value.trim() } });
-          let msg = null; if (error) { try { const j = await error.context.json(); msg = j && j.error; } catch (_) { } msg = msg || "Couldn't send your request. Try again."; }
-          if (msg) { $("#w-go", m).disabled = false; return status($("#w-st", m), msg, "err"); }
-          closeModal(); toast(`Withdrawal of ${money(amount)} requested. We'll send it to your PayID soon.`, 5000); loadWithdraw();
-        };
-      });
+    if (error) throw error;
+    if (!p) { app().innerHTML = `<div class="empty">This post doesn't exist or has been removed. <a href="/">Back to the forum</a></div>`; return; }
+    const me = S.user && S.user.id, admin = !!(S.profile && S.profile.is_admin), mine = p.author_id === me;
+    const replies = (reps || []).sort((a, b) => (b.id === p.accepted_reply) - (a.id === p.accepted_reply) || b.score - a.score || new Date(a.created_at) - new Date(b.created_at));
+    const voted = new Set();
+    if (me) {
+      const ids = replies.map(r => r.id);
+      const { data: v } = await sb.from("forum_votes").select("post_id,reply_id").eq("user_id", me).or(`post_id.eq.${id}${ids.length ? `,reply_id.in.(${ids.join(",")})` : ""}`);
+      (v || []).forEach(x => voted.add(x.post_id || x.reply_id));
+    }
+    document.title = `${p.course_code}: ${p.title} · Distinction`;
+    const back = forumUrl({ uni: p.uni_id, course: p.course_code });
+    const tools = (kind, row) => {
+      const own = row.author_id === me, out = [];
+      if (own) out.push(`<button type="button" class="link-btn" data-edit="${kind}:${row.id}">Edit</button>`, `<button type="button" class="link-btn" data-del="${kind}:${row.id}">Delete</button>`);
+      if (!own) out.push(`<button type="button" class="link-btn" data-report="${kind}:${row.id}">Report</button>`);
+      if (admin) out.push(`<button type="button" class="link-btn danger" data-mod="${kind}:${row.id}:${row.removed ? 0 : 1}">${row.removed ? "Restore" : "Remove"}</button>`);
+      return out.join("");
+    };
+    app().innerHTML = `<div class="medium post-page">
+      <a href="${back}" class="back-link">← <span data-notr>${esc(p.course_code)}</span> at <span data-notr>${esc(uniShort(p.uni_id))}</span></a>
+      <article class="panel post-full" data-trg>
+        ${p.removed ? `<div class="status err">This post has been removed by a moderator${mine ? ", so only you can see it" : ""}.</div>` : ""}
+        <div class="pc-tags"><a class="q-code" href="${back}" data-notr>${esc(p.course_code)}</a><a class="tagchip" href="${forumUrl({ uni: p.uni_id })}" data-notr>${esc(uniShort(p.uni_id))}</a></div>
+        <h1 class="post-title" data-tr>${esc(p.title)}</h1>
+        <div class="pc-meta">Asked by <b data-notr>${esc(p.author_name || "Student")}</b>${p.author_uni ? ` <span data-notr>(${esc(uniShort(p.author_uni))})</span>` : ""} · ${ago(p.created_at)}${p.edited_at ? " · edited" : ""}</div>
+        <div class="post-body" data-tr>${richText(p.body)}</div>
+        <div class="post-actions" data-trslot>${voteBtn("post", p.id, p.score, voted.has(p.id), mine)}<span class="tools">${me ? tools("post", p) : ""}</span></div>
+      </article>
+      <h2 class="ans-count">${replies.length ? plural(replies.length, "answer") : "No answers yet"}</h2>
+      <div class="col" id="replies">${replies.map(r => {
+        const best = r.id === p.accepted_reply;
+        return `<div class="reply${best ? " best" : ""}${r.removed ? " removed" : ""}" id="r-${r.id}" data-trg>
+          ${best ? '<span class="best-chip">✓ Best answer</span>' : ""}${r.removed ? '<span class="status-pill rejected">Removed</span>' : ""}
+          <div class="post-body" data-tr>${richText(r.body)}</div>
+          <div class="reply-foot" data-trslot>${voteBtn("reply", r.id, r.score, voted.has(r.id), r.author_id === me)}
+            <span class="pc-meta"><b data-notr>${esc(r.author_name || "Student")}</b>${r.author_uni ? ` <span data-notr>(${esc(uniShort(r.author_uni))})</span>` : ""} · ${ago(r.created_at)}${r.edited_at ? " · edited" : ""}</span>
+            <span class="tools">${mine && !r.removed ? `<button type="button" class="link-btn strong" data-best="${best ? "" : r.id}">${best ? "Unmark best answer" : "Mark as best answer"}</button>` : ""}${me ? tools("reply", r) : ""}</span></div>
+        </div>`;
+      }).join("")}</div>
+      <div class="panel composer-box" id="compose"></div>
+    </div>`;
+
+    // Reply box
+    const box = $("#compose");
+    if (p.removed) box.remove();
+    else if (S.user && !(S.profile && S.profile.onboarded)) box.innerHTML = `<h3>Know the answer?</h3><p class="muted" style="font-size:14px">Finish setting up your account to answer. It takes a minute.</p><div class="row"><a class="btn primary" href="/welcome" id="to-welcome">Finish setting up</a></div>`;
+    else if (!S.user) box.innerHTML = `<h3>Know the answer?</h3><p class="muted" style="font-size:14px">Log in or create a free account to answer.</p><div class="row"><a class="btn primary" href="/signup" data-after>Sign up</a><a class="btn" href="/login" data-after>Log in</a></div>`;
+    else {
+      box.innerHTML = `<h3>Your answer</h3>
+        <textarea class="prose" id="rp" maxlength="${REPLY_MAX}" placeholder="Explain it the way you'd want it explained. Point to the lecture, week or textbook section if you can."></textarea>
+        <div class="row" style="justify-content:space-between"><small class="muted">Explain the idea. Don't post full solutions to assessment tasks. <span id="rp-n" class="mono"></span></small><button class="btn primary" id="rp-go">Post answer</button></div><div id="rp-st" hidden></div>`;
+      const ta = $("#rp"), n = () => $("#rp-n").textContent = ta.value.length > REPLY_MAX - 300 ? `${ta.value.length}/${REPLY_MAX}` : "";
+      ta.oninput = n;
+      $("#rp-go").onclick = async () => {
+        const body = ta.value.trim();
+        if (body.length < 2) return status($("#rp-st"), "Write your answer first.", "err");
+        $("#rp-go").disabled = true;
+        const { data, error } = await sb.from("forum_replies").insert({ post_id: p.id, author_id: me, body }).select("id").single();
+        $("#rp-go").disabled = false;
+        if (error) return status($("#rp-st"), errMsg(error), "err");
+        track("post_answer", { course: p.course_code });
+        toast("Answer posted");
+        await pagePost(p.id);
+        const el = $("#r-" + data.id); if (el) el.scrollIntoView({ block: "center" });
+      };
+    }
+    if ($("#to-welcome")) $("#to-welcome").addEventListener("click", () => sessionStorage.setItem("after-welcome", location.pathname));
+    box && box.querySelectorAll("[data-after]").forEach(a => a.addEventListener("click", () => sessionStorage.setItem("after-login", location.pathname)));
+
+    // Actions
+    const reload = () => pagePost(p.id);
+    const findRow = (kind, rid) => kind === "post" ? p : replies.find(r => r.id === rid);
+    app().querySelector(".post-page").onclick = async e => {
+      const t = e.target.closest("[data-vote],[data-edit],[data-del],[data-report],[data-mod],[data-best]"); if (!t) return;
+      if (t.dataset.vote) {
+        if (!S.user) return needLogin("upvote");
+        const [kind, rid] = t.dataset.vote.split(":"), on = t.getAttribute("aria-pressed") === "true", col = kind === "post" ? "post_id" : "reply_id";
+        const b = t.querySelector("b"); t.disabled = true;
+        const { error } = on ? await sb.from("forum_votes").delete().eq("user_id", me).eq(col, rid) : await sb.from("forum_votes").insert({ [col]: rid, user_id: me });
+        t.disabled = false;
+        if (error) return toast(errMsg(error));
+        t.classList.toggle("on", !on); t.setAttribute("aria-pressed", String(!on)); b.textContent = Math.max(0, +b.textContent + (on ? -1 : 1));
+        return;
+      }
+      if (t.dataset.best !== undefined) {
+        const { error } = await sb.from("forum_posts").update({ accepted_reply: t.dataset.best || null }).eq("id", p.id);
+        if (error) return toast(errMsg(error));
+        toast(t.dataset.best ? "Marked as the best answer" : "Best answer unmarked"); return reload();
+      }
+      if (t.dataset.edit) {
+        const [kind, rid] = t.dataset.edit.split(":"), row = findRow(kind, rid);
+        return openModal(`<h3>Edit your ${kind === "post" ? "question" : "answer"}</h3>
+          ${kind === "post" ? `<label class="field"><span>Title</span><input type="text" id="ed-t" maxlength="${TITLE_MAX}" value="${esc(row.title)}"></label>` : ""}
+          <label class="field"><span>${kind === "post" ? "Details" : "Answer"}</span><textarea class="prose" id="ed-b" maxlength="${kind === "post" ? BODY_MAX : REPLY_MAX}" style="min-height:180px">${esc(row.body)}</textarea></label>
+          <div id="ed-st" hidden></div><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="ed-go">Save</button></div>`, m => {
+          $("#ed-go", m).onclick = async () => {
+            const body = $("#ed-b", m).value.trim(), patch = { body };
+            if (kind === "post") { patch.title = $("#ed-t", m).value.trim(); if (patch.title.length < TITLE_MIN) return status($("#ed-st", m), `Make the title at least ${TITLE_MIN} characters.`, "err"); if (body.length < BODY_MIN) return status($("#ed-st", m), `Add a bit more detail (at least ${BODY_MIN} characters).`, "err"); }
+            else if (body.length < 2) return status($("#ed-st", m), "The answer can't be empty.", "err");
+            const { error } = await sb.from(kind === "post" ? "forum_posts" : "forum_replies").update(patch).eq("id", rid);
+            if (error) return status($("#ed-st", m), errMsg(error), "err");
+            closeModal(); toast("Saved"); reload();
+          };
+        });
+      }
+      if (t.dataset.del) {
+        const [kind, rid] = t.dataset.del.split(":");
+        return openModal(`<h3>Delete this ${kind === "post" ? "question" : "answer"}?</h3><p class="muted" style="font-size:14px">${kind === "post" ? "The question and all its answers will be deleted for good." : "Your answer will be deleted for good."}</p><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="del-go">Delete</button></div>`, m => {
+          $("#del-go", m).onclick = async () => {
+            const { error } = await sb.from(kind === "post" ? "forum_posts" : "forum_replies").delete().eq("id", rid);
+            if (error) return toast(errMsg(error));
+            closeModal(); toast("Deleted"); kind === "post" ? go(back) : reload();
+          };
+        });
+      }
+      if (t.dataset.report) {
+        if (!S.user) return needLogin("report");
+        const [kind, rid] = t.dataset.report.split(":");
+        return openModal(`<h3>Report this ${kind === "post" ? "question" : "answer"}</h3><p class="muted" style="font-size:14px">A moderator will take a look. Reports are anonymous.</p>
+          <div class="col" style="gap:8px">${REPORT_REASONS.map(([v, l], i) => `<label class="check"><input type="radio" name="rr" value="${v}" ${i ? "" : "checked"}> ${l}</label>`).join("")}</div>
+          <label class="field"><span>Anything else? (optional)</span><textarea class="prose" id="rr-note" maxlength="500" style="min-height:70px"></textarea></label>
+          <div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="rr-go">Send report</button></div>`, m => {
+          $("#rr-go", m).onclick = async () => {
+            const reason = m.querySelector('input[name="rr"]:checked').value;
+            const { error } = await sb.from("forum_reports").insert({ [kind === "post" ? "post_id" : "reply_id"]: rid, reason, note: $("#rr-note", m).value.trim() || null, reporter_id: me });
+            closeModal();
+            if (error) return toast(/duplicate/i.test(error.message) ? "You've already reported this. Thanks." : errMsg(error));
+            toast("Thanks. A moderator will review it.");
+          };
+        });
+      }
+      if (t.dataset.mod) {
+        const [kind, rid, rm] = t.dataset.mod.split(":");
+        const { error } = await sb.from(kind === "post" ? "forum_posts" : "forum_replies").update({ removed: rm === "1" }).eq("id", rid);
+        if (error) return toast(errMsg(error));
+        toast(rm === "1" ? "Removed" : "Restored"); reload();
+      }
+    };
+    autoTranslate(app());
+  }
+
+  /* ---------------- ask a question ---------------- */
+  async function pageAsk() {
+    const p = S.profile, qs = new URLSearchParams(location.search);
+    const startUni = S.uniMap[qs.get("uni")] ? qs.get("uni") : (p.uni_id || null);
+    app().innerHTML = `<div class="medium"><div class="panel ask-panel">
+      <div><span class="eyebrow">New question</span><h1 style="font-size:30px;margin-top:4px">Ask the forum</h1><p class="muted" style="margin-top:6px">Your question is public, so anyone searching for your course can find it and answer.</p></div>
+      <div class="two"><div class="field"><span id="a-uni-lbl">University</span><div id="a-uni" data-label="a-uni-lbl"></div></div>
+      <div class="field"><span id="a-course-lbl">Course</span><div id="a-course" data-label="a-course-lbl"></div><small>Can't find it? Type the course code.</small></div></div>
+      <label class="field"><span>Title</span><input type="text" id="a-title" maxlength="${TITLE_MAX}" placeholder="e.g. Why does my linked list lose the last node when I free it?"><small><span>Sum up your question in one line.</span> <span class="mono" id="a-title-n"></span></small></label>
+      <label class="field"><span>Details</span><textarea class="prose" id="a-body" maxlength="${BODY_MAX}" style="min-height:180px" placeholder="What are you stuck on, what have you tried, and which week or topic is it from?"></textarea><small><span>At least ${BODY_MIN} characters.</span> <span class="mono" id="a-body-n"></span></small></label>
+      <div class="rules-box"><b>Before you post</b><ul><li>Ask to understand: a concept, course content, how to approach a topic, or what a course is like.</li><li>Don't post questions from an assignment, quiz or exam that's still open, and don't ask for full solutions.</li><li>Posts are public. Leave out personal details like your student number.</li></ul></div>
+      <label class="check"><input type="checkbox" id="a-ok"> This isn't from an assessment that's still open, and I'm asking to understand it, not for answers to hand in.</label>
+      <div id="st" hidden></div>
+      <div class="row" style="justify-content:flex-end"><a class="btn ghost" href="/">Cancel</a><button class="btn primary" id="a-go">Post question</button></div>
+    </div></div>`;
+    const courseSel = glassSelect($("#a-course"), { options: [], value: null, mono: true, placeholder: "Choose a course", search: "Type a course code or name, e.g. COMP", freeText: validCode, minQuery: 3, minText: "Type at least 3 letters of the course code or name, e.g. COMP or Accounting", emptyText: "No matches. Type the full course code to use it." });
+    const fill = async (uni, code) => {
+      const opts = courseOpts(await coursesFor(uni));
+      if (code && validCode(code) && !opts.some(o => o.value === code)) opts.unshift({ value: code, label: code });
+      courseSel.setOptions(opts, code && validCode(code) ? code : null);
+    };
+    const uniSel = glassSelect($("#a-uni"), { options: uniOpts(), value: startUni, placeholder: "Choose a university", search: "Search universities", hideSub: true, onChange: v => fill(v, null) });
+    await fill(startUni, (qs.get("course") || "").toUpperCase().replace(/[^A-Z0-9]/g, "") || null);
+    const cnt = (id, max) => { const el = $("#" + id), out = $("#" + id + "-n"); el.oninput = () => out.textContent = `${el.value.length}/${max}`; };
+    cnt("a-title", TITLE_MAX); cnt("a-body", BODY_MAX);
+    $("#a-go").onclick = async () => {
+      const uni = uniSel.value, code = (courseSel.value || "").toUpperCase(), title = $("#a-title").value.trim(), body = $("#a-body").value.trim(), st = $("#st");
+      if (!uni) return status(st, "Choose your university.", "err");
+      if (!validCode(code)) return status(st, "Choose your course, or type its code (like COMP1511).", "err");
+      if (title.length < TITLE_MIN) return status(st, `Write a title of at least ${TITLE_MIN} characters.`, "err");
+      if (body.length < BODY_MIN) return status(st, `Add a bit more detail so people know what you're stuck on (at least ${BODY_MIN} characters).`, "err");
+      if (!$("#a-ok").checked) return status(st, "Tick the box to confirm this isn't from an open assessment.", "err");
+      $("#a-go").disabled = true; status(st, "Posting…", "", true);
+      const { data, error } = await sb.from("forum_posts").insert({ uni_id: uni, course_code: code, title, body, author_id: S.user.id }).select("id").single();
+      $("#a-go").disabled = false;
+      if (error) return status(st, errMsg(error), "err");
+      S.courses[uni] = null;
+      track("post_question", { course: code, uni });
+      toast("Question posted"); go("/p/" + data.id);
     };
   }
 
-  async function renderFeed() {
-    const el = $("#feed"), done = $("#feed-done"); if (!el) return;
-    const more = !!($("#feed-more") && $("#feed-more").checked);
-    const { data, error } = await sb.rpc("tutor_feed", { p_more: more });
-    if (error) { el.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
-    const now = Date.now();
-    const holding = data.find(q => q.my_claim_expires && new Date(q.my_claim_expires) > now && q.my_position == null);
-    const answered = data.filter(q => q.my_position != null);
-    // Open = still accepting answers and not answered by you
-    const open = data.filter(q => q.my_position == null && new Date(q.expires_at) > now && q.answer_count < q.slots);
-    const rank = q => (q.my_claim_expires && new Date(q.my_claim_expires) > now ? -1 : 0) + (q.urgent && new Date(q.created_at).getTime() + URGENT_MIN * 60e3 > now ? 0 : 1) + (q.extra ? 2 : 0);
-    open.sort((a, b) => rank(a) - rank(b) || new Date(b.created_at) - new Date(a.created_at));
-    el.innerHTML = open.length ? open.map(q => feedCard(q, holding)).join("")
-      : `<div class="empty">There are no new questions to claim right now. ${more ? "" : "Tick <b>Show more questions</b> to see ones from related courses, or "}${S.profile.email_alerts ? "we'll email you when one comes in." : "turn on email alerts so you hear about the next one."}</div>`;
-    if (done) {
-      done.innerHTML = answered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).map(q => feedCard(q, holding)).join("");
-      $("#done-head").hidden = !answered.length;
+  /* ---------------- my posts ---------------- */
+  async function pageMine() {
+    const tab = new URLSearchParams(location.search).get("tab") === "answers" ? "answers" : "questions";
+    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">My posts</h1><a class="btn primary" href="/ask">Ask a question</a></div>
+      <div class="seg" style="max-width:320px"><label><input type="radio" name="mt" value="questions" ${tab === "questions" ? "checked" : ""}><span>My questions</span></label><label><input type="radio" name="mt" value="answers" ${tab === "answers" ? "checked" : ""}><span>My answers</span></label></div>
+      <div class="col" id="mine"><div class="boot">Loading…</div></div></section>`;
+    document.querySelectorAll('input[name="mt"]').forEach(r => r.onchange = () => go("/my" + (r.value === "answers" ? "?tab=answers" : ""), true));
+    const el = $("#mine");
+    if (tab === "questions") {
+      const { data, error } = await sb.from("forum_posts").select(POST_COLS).eq("author_id", S.user.id).order("created_at", { ascending: false }).limit(200);
+      if (error) throw error;
+      el.innerHTML = data.length ? data.map(postCard).join("") : `<div class="empty empty-cta"><b>You haven't asked anything yet.</b><a class="btn primary" href="/ask">Ask a question</a></div>`;
+    } else {
+      const { data, error } = await sb.from("forum_replies").select("id,body,score,removed,created_at,post:forum_posts(id,title,course_code,uni_id,accepted_reply)").eq("author_id", S.user.id).order("created_at", { ascending: false }).limit(200);
+      if (error) throw error;
+      el.innerHTML = data.length ? data.map(r => `<a class="post-card" href="/p/${r.post ? r.post.id : ""}#r-${r.id}"><div class="pc-stats" aria-hidden="true"><span><b>${r.score}</b>${r.score === 1 ? "vote" : "votes"}</span></div><div class="pc-main">
+        <div class="pc-tags">${r.post ? `<span class="q-code" data-notr>${esc(r.post.course_code)}</span><span class="tagchip" data-notr>${esc(uniShort(r.post.uni_id))}</span>` : ""}${r.post && r.post.accepted_reply === r.id ? '<span class="best-chip">✓ Best answer</span>' : ""}${r.removed ? '<span class="status-pill rejected">Removed</span>' : ""}</div>
+        <h3 class="pc-title">${esc(r.post ? r.post.title : "Deleted question")}</h3><p class="pc-snip">${esc(snippet(r.body, 180))}</p><div class="pc-meta">Answered ${ago(r.created_at)}</div></div></a>`).join("") : `<div class="empty empty-cta"><b>You haven't answered anything yet.</b><span>Browse questions in the courses you've done.</span><a class="btn primary" href="/${S.profile.uni_id ? "?uni=" + encodeURIComponent(S.profile.uni_id) : ""}">Browse the forum</a></div>`;
     }
-    autoTranslate(el); if (done) autoTranslate(done);
-  }
-  function feedCard(q, holding) {
-    const now = Date.now(), ebEnd = new Date(q.created_at).getTime() + URGENT_MIN * 60e3;
-    const eb = q.urgent && ebEnd > now;
-    const full = q.answer_count >= q.slots, answered = q.my_position != null;
-    const claimed = q.my_claim_expires && new Date(q.my_claim_expires) > now;
-    const spots = q.slots - q.answer_count - q.held_by_others;
-    const similar = q.match_code && (q.match_uni !== q.uni_id || q.match_code !== q.course_code);
-    let action;
-    if (answered) action = `<div class="elig yes">✓ You answered ${["1st", "2nd", "3rd", "4th", "5th"][q.my_position - 1]} · ${money(Number(q.my_payout))}${Number(q.my_payout) > PAY ? " (early bird)" : ""}</div>`;
-    else if (new Date(q.expires_at) <= now) action = `<div class="muted" style="font-size:13px">This question has closed.</div>`;
-    else if (claimed) action = `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">Held for you · ${clock(new Date(q.my_claim_expires) - now)} left</span><a class="btn primary sm" href="/answer/${q.id}">Continue answering</a></div>`;
-    else if (full) action = `<div class="muted" style="font-size:13px">All ${q.slots} spots have been answered.</div>`;
-    else if (spots <= 0) action = `<div class="muted" style="font-size:13px">All remaining spots are held by other peer mentors. Check back in a few minutes.</div>`;
-    else action = `<div class="row" style="justify-content:space-between"><span class="muted" style="font-size:13px">${holding ? `Finish or release your <span class="mono">${esc(holding.course_code)}</span> question to claim this one` : `${spots} of ${q.slots} spot${q.slots > 1 ? "s" : ""} left`}</span><button class="btn primary sm" data-claim="${q.id}" ${holding ? "disabled" : ""}>Claim · 2 min to answer</button></div>`;
-    return `<article class="q tq${answered || full ? " done" : ""}" data-trg>
-      <div class="tq-head"><div class="avatar sm" aria-hidden="true">${esc(initials(q.asker_name))}</div>
-        <div style="min-width:0;flex:1"><b data-notr>${esc(q.asker_name)}</b><div class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</div></div>
-        <div class="reward-box${eb ? " eb" : ""}">${eb ? `<span class="eb-tag">Early bird</span><b>${money(URGENT_PAY)}</b><small>${mins(ebEnd - now)} min left, then ${money(PAY)}</small>` : `<b>${money(PAY)}</b><small>Reward</small>`}</div></div>
-      <div class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="muted" style="font-size:13px">${esc(q.course_title)}</span>${q.extra ? `<span class="simchip related">Related to your ${esc(q.match_code || "courses")}</span>` : similar ? `<span class="simchip">Similar to your ${esc(q.match_code)}</span>` : ""}</div>
-      ${(q.goals || []).length ? `<div class="goals-row"><span class="muted">After</span>${goalChips(q.goals)}</div>` : ""}
-      <div data-trslot><p class="q-text" data-tr>${esc(q.body)}</p></div>
-      ${q.attachment_name ? `<span class="fchip">${q.attachment_type === "application/pdf" ? "PDF" : "IMG"} · ${esc(q.attachment_name)} · ${kb(q.attachment_size || 0)}</span>` : ""}
-      ${action}
-    </article>`;
-  }
-
-  /* ---------------- answer editor (peer mentor) ---------------- */
-  const drafts = {};
-  async function pageAnswer(id) {
-    const home = S.profile.tutor_status === "approved" && !S.profile.tutor_paused ? "/tutor" : "/admin";
-    app().innerHTML = `<div class="boot">Loading question…</div>`;
-    const { data, error } = await sb.rpc("tutor_feed", { p_more: true }); if (error) throw error;
-    const q = data.find(x => x.id === id);
-    if (!q) { app().innerHTML = `<div class="empty">This question isn't available to you. <a href="${home}">Back to questions</a></div>`; return; }
-    if (q.my_position != null) { toast("You've already answered this question"); go(home); return; }
-    let claimUntil = q.my_claim_expires ? new Date(q.my_claim_expires) : null;
-    const d = drafts[id] || (drafts[id] = { bubbles: [""], ann: null });
-    const eb = () => q.urgent && new Date(q.created_at).getTime() + URGENT_MIN * 60e3 > Date.now();
-    app().innerHTML = `<section class="view">
-      <a href="${home}">← ${home === "/admin" ? "Admin" : "Pending questions"}</a>
-      <div class="${q.attachment_path ? "answer-layout" : "medium"}">
-        ${q.attachment_path ? `<div class="doc-wrap"><div class="doc-toolbar" role="toolbar" aria-label="Markup tools">
-            <button class="tool" data-tool="pen" aria-pressed="true">Pen</button><button class="tool" data-tool="highlight" aria-pressed="false">Highlighter</button><button class="tool" data-tool="note" aria-pressed="false">Text note</button>
-            <span style="width:8px"></span>${DocView.COLORS.map((c, i) => `<button class="swatch" data-color="${c}" style="background:${c}" aria-label="Colour ${i + 1}" aria-pressed="${i === 0}"></button>`).join("")}
-            <span style="flex:1"></span><button class="tool" id="undo">Undo</button><button class="tool" id="clear">Clear</button></div>
-            <p class="muted" style="font-size:13px">Draw or add text notes directly on the student's document. You can't upload files.</p>
-            <div id="doc"></div></div>` : ""}
-        <div class="${q.attachment_path ? "answer-side" : "col"}">
-          <article class="q">
-            <div class="tq-head"><div class="avatar sm" aria-hidden="true">${esc(initials(q.asker_name))}</div><div style="flex:1;min-width:0"><b data-notr>${esc(q.asker_name)}</b><div class="q-time">${esc(uniName(q.uni_id))} · ${ago(q.created_at)}</div></div>
-              <div class="reward-box${eb() ? " eb" : ""}" id="reward"></div></div>
-            <div class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="muted" style="font-size:13px">${esc(q.course_title)}</span></div>
-            <div data-trslot><p class="q-text" style="font-size:16px" data-tr>${esc(q.body)}</p></div>
-            ${(q.goals || []).length ? `<div class="goals-row"><span class="muted">The student is after</span>${goalChips(q.goals)}</div>` : ""}
-          </article>
-          <div class="panel" style="gap:12px">
-            <div class="row" style="justify-content:space-between"><h3 style="font-size:18px">Your answer</h3><span class="claim-clock" id="claim-state"></span></div>
-            <p class="muted" style="font-size:13px">You have <b>2 minutes</b> to write, then a minute to review and post. Type it yourself: pasting is turned off, the question can't be copied, and every answer is checked for AI writing.</p>
-            <div class="composer-bubbles" id="bubbles"></div>
-            <div class="row" style="justify-content:space-between"><button class="btn sm" id="add-b">+ Add another message</button><span class="counter" id="total"></span></div>
-            <div id="st" hidden></div>
-            <div class="row" style="justify-content:space-between"><button class="btn ghost" id="release">Release question</button><span class="row" style="gap:8px"><button class="btn" id="review-btn" hidden>Review answer</button><button class="btn primary" id="submit">Review and post</button></span></div>
-          </div>
-        </div>
-      </div></section>`;
-    // claim if not yet held
-    async function ensureClaim() {
-      if (claimUntil && claimUntil > new Date()) return true;
-      const { data: until, error } = await sb.rpc("claim_question", { q_id: id });
-      if (error) { status($("#st"), errMsg(error), "err"); return false; }
-      claimUntil = new Date(until); paintClaim(); return true;
-    }
-    let timeUp = false, reviewing = false, docApi = null;
-    function paintClaim() {
-      const el = $("#claim-state"); if (!el) return;
-      const leftMs = claimUntil ? claimUntil - REVIEW_MS - Date.now() : 0;
-      el.className = "claim-clock" + (leftMs > 0 && leftMs < 30e3 ? " low" : "") + (leftMs <= 0 ? " over" : "");
-      el.textContent = leftMs > 0 ? `${clock(leftMs)} left to answer` : "Time's up. Review your answer.";
-      if (leftMs <= 0 && !timeUp && claimUntil) { timeUp = true; lockEditor(); openReview(); }
-      const rc = $("#rv-clock"); if (rc) { const r = claimUntil - Date.now(); rc.textContent = r > 0 ? `Post within ${clock(r)} to keep your spot.` : "Your hold has ended. Posting still works if a spot is free."; }
-      $("#reward").innerHTML = eb() ? `<span class="eb-tag">Early bird</span><b>${money(URGENT_PAY)}</b><small>${mins(new Date(q.created_at).getTime() + URGENT_MIN * 60e3 - Date.now())} min left, then ${money(PAY)}</small>` : `<b>${money(PAY)}</b><small>Reward</small>`;
-    }
-    const qa = app().querySelector("article.q"); if (qa) { qa.setAttribute("data-trg", ""); autoTranslate(app()); }
-    await ensureClaim(); paintClaim();
-    every(1000, paintClaim);
-
-    function renderBubbles() {
-      $("#bubbles").innerHTML = d.bubbles.map((b, i) => `<div class="b-row"><textarea class="prose" data-b="${i}" maxlength="${A_MAX}" placeholder="${i === 0 ? "Start with the key idea…" : "Add more detail…"}" aria-label="Message ${i + 1}">${esc(b)}</textarea>${d.bubbles.length > 1 ? `<button class="btn ghost sm" data-rm="${i}" aria-label="Remove message ${i + 1}">×</button>` : ""}</div>`).join("");
-      updateTotal();
-    }
-    function updateTotal() { const t = d.bubbles.reduce((a, b) => a + b.length, 0); const el = $("#total"); el.textContent = `${t} / ${A_MAX} characters`; el.classList.toggle("over", t > A_MAX); }
-    $("#bubbles").addEventListener("input", e => { const i = e.target.dataset.b; if (i != null) { d.bubbles[+i] = e.target.value; updateTotal(); } });
-    // Typing only: no pasting, dropping or inserting text any other way. Count what's actually typed.
-    d.typed = d.typed || 0;
-    $("#bubbles").addEventListener("beforeinput", e => {
-      const t = e.inputType || "";
-      if (/^insertFrom(Paste|Drop|Yank|PasteAsQuotation)$/.test(t)) { e.preventDefault(); toast("Pasting is turned off. Type your answer yourself."); return; }
-      if (/^insert(Text|CompositionText|ReplacementText)$/.test(t) && e.data) d.typed += e.data.length;
-      if (/^insert(LineBreak|Paragraph)$/.test(t)) d.typed += 1;
-    });
-    ["paste", "drop"].forEach(ev => $("#bubbles").addEventListener(ev, e => { e.preventDefault(); toast("Pasting is turned off. Type your answer yourself."); }));
-    // The question can't be copied either
-    const lock = el => { if (!el) return; el.classList.add("nocopy"); ["copy", "cut", "contextmenu", "selectstart", "dragstart"].forEach(ev => el.addEventListener(ev, e => { e.preventDefault(); if (ev === "copy" || ev === "cut") toast("Questions can't be copied."); })); };
-    lock(app().querySelector("article.q")); lock($("#doc"));
-    $("#bubbles").addEventListener("click", e => { const r = e.target.closest("[data-rm]"); if (r) { d.bubbles.splice(+r.dataset.rm, 1); renderBubbles(); } });
-    $("#add-b").onclick = () => { if (d.bubbles.length >= 10) return toast("Up to 10 messages per answer."); d.bubbles.push(""); renderBubbles(); $$("#bubbles textarea").pop().focus(); };
-    renderBubbles();
-
-    if (q.attachment_path) {
-      try {
-        docApi = await DocView.mount($("#doc"), { url: await signedUrl("attachments", q.attachment_path), type: q.attachment_type, editable: true, annotations: d.ann, onChange: () => { d.ann = docApi.annotations; } });
-      } catch (e) { $("#doc").innerHTML = `<div class="status err">${esc(errMsg(e))}</div>`; }
-      $$(".doc-toolbar [data-tool]").forEach(b => b.onclick = () => { $$(".doc-toolbar [data-tool]").forEach(x => x.setAttribute("aria-pressed", x === b)); docApi && docApi.setTool(b.dataset.tool); });
-      $$(".doc-toolbar [data-color]").forEach(b => b.onclick = () => { $$(".doc-toolbar [data-color]").forEach(x => x.setAttribute("aria-pressed", x === b)); docApi && docApi.setColor(b.dataset.color); });
-      $("#undo").onclick = () => docApi && docApi.undo();
-      $("#clear").onclick = () => { if (!docApi) return; openModal(`<h3>Clear all markup?</h3><p class="muted">This removes every drawing and note on the document.</p><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="cl-go">Clear markup</button></div>`, m => { $("#cl-go", m).onclick = () => { docApi.clear(); closeModal(); }; }); };
-    }
-
-    if (timeUp) lockEditor();
-    $("#release").onclick = async () => { await sb.rpc("release_claim", { q_id: id }); delete drafts[id]; toast("Question released"); go(home); };
-    // When time's up the answer can't be changed any more, only posted or dropped
-    function lockEditor() {
-      $$("#bubbles textarea").forEach(t => t.readOnly = true);
-      ["add-b", "submit"].forEach(x => { const b = $("#" + x); if (b) b.disabled = true; });
-      $$(".doc-toolbar button").forEach(b => b.disabled = true);
-      if (docApi && docApi.setTool) docApi.setTool("none");
-      $$("#doc .note").forEach(n => n.contentEditable = "false");
-      const rb = $("#review-btn"); if (rb) rb.hidden = false;
-    }
-    function answerParts() {
-      const bubbles = d.bubbles.map(b => b.trim()).filter(Boolean);
-      return { bubbles, total: bubbles.reduce((a, b) => a + b.length, 0) };
-    }
-    // Review before posting: after pressing Submit, or automatically when the 2 minutes are up
-    function openReview() {
-      reviewing = true;
-      const { bubbles, total } = answerParts();
-      const c = docApi ? DocView.count(docApi.annotations) : { strokes: 0, notes: 0 };
-      const tooShort = !bubbles.length || total < 30, tooLong = total > A_MAX;
-      openModal(`<h3>${timeUp ? "Time's up. Review your answer" : "Review your answer"}</h3>
-        <p class="muted" style="font-size:14px">Check it reads right. Once it's posted, the student sees it straight away and it can't be changed.</p>
-        <div class="bubbles review-bubbles">${bubbles.length ? bubbles.map(b => `<div class="bubble">${esc(b)}</div>`).join("") : '<p class="muted">You haven\'t written anything.</p>'}</div>
-        ${docApi ? `<p class="muted" style="font-size:13px">Plus ${c.notes} note${c.notes === 1 ? "" : "s"} and ${c.strokes} drawing${c.strokes === 1 ? "" : "s"} on the student's document.</p>` : ""}
-        ${tooShort ? '<div class="status err">Too short to post. Answers need at least 30 characters.</div>' : tooLong ? '<div class="status err">Too long to post. Keep it to ${A_MAX} characters or fewer.</div>' : ""}
-        ${timeUp ? '<p class="claim-clock" id="rv-clock" style="align-self:flex-start"></p>' : ""}
-        <div id="rv-st" hidden></div>
-        <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><button class="btn ghost" id="rv-drop">Don't post</button>
-          <span class="row" style="gap:8px">${timeUp ? "" : '<button class="btn" id="rv-edit">Keep editing</button>'}<button class="btn primary" id="rv-post" ${tooShort || tooLong ? "disabled" : ""}>Post answer</button></span></div>`, m => {
-        const edit = $("#rv-edit", m); if (edit) edit.onclick = () => { reviewing = false; closeModal(); };
-        $("#rv-drop", m).onclick = async () => { await sb.rpc("release_claim", { q_id: id }); delete drafts[id]; closeModal(); toast("Not posted. The question has been released for other peer mentors."); go(home); };
-        $("#rv-post", m).onclick = () => post(m);
-      });
-      paintClaim();
-    }
-    $("#review-btn").onclick = openReview;
-    $("#submit").onclick = () => openReview();
-    async function post(m) {
-      const { bubbles, total } = answerParts();
-      const btn = $("#rv-post", m); btn.disabled = true; status($("#rv-st", m), "Posting…", "", true);
-      const { data: row, error } = await sb.rpc("submit_answer", { q_id: id, p_bubbles: bubbles, p_annotations: docApi ? docApi.annotations : {} });
-      if (error) { btn.disabled = false; return status($("#rv-st", m), errMsg(error), "err"); }
-      closeModal();
-      const r = Array.isArray(row) ? row[0] : row;
-      const typed = Math.min(d.typed || 0, total);
-      delete drafts[id];
-      toast(`Answer sent. ${money(Number(r && r.payout || PAY))} added to your earnings${r && r.urgent_rate ? " (early bird)" : ""}.`, 4500);
-      // AI-writing check runs in the background; a flagged answer gets a warning straight away
-      if (r && r.id) sb.functions.invoke("check-answer", { body: { answer_id: r.id, typed, total } }).then(({ data }) => {
-        if (data && data.flagged) aiWarning(data.ai_score);
-      }).catch(() => { });
-      go(home);
-    };
-  }
-
-  /* ---------------- peer mentor application ---------------- */
-  async function pageTutorApply() {
-    const p = S.profile;
-    const A = { step: 1, courses: [], file: null, path: null, myequals: "", agree: [false, false, false] };
-    app().innerHTML = `<div class="medium"><div class="col">
-      <div><span class="eyebrow">Peer mentor application</span><h1 style="font-size:30px;margin-top:4px">Become a Distinction peer mentor</h1></div>
-      <div class="steps" id="steps"></div><div class="panel" id="body"></div></div></div>`;
-    const STEPS = ["Peer mentor profile", "Transcript", FEATURES.equals ? "Verification" : "Agreement", "Submit"];
-    const paintSteps = () => $("#steps").innerHTML = STEPS.map((s, i) => `<span class="${i + 1 === A.step ? "on" : i + 1 < A.step ? "done" : ""}">${i + 1}. ${s}</span>`).join("");
-    let readProfile = null;
-
-    async function step1() {
-      const pr = S.profile;
-      $("#body").innerHTML = `<h2>Your peer mentor profile</h2>
-        <p class="muted" style="font-size:14px">Students see your display name, uni, degree and this intro. You can change your details anytime in <a href="/profile">Profile and settings</a>.</p>
-        <dl class="kv"><dt>Display name</dt><dd>${esc(pr.display_name || "")}</dd><dt>University</dt><dd>${esc(uniName(pr.uni_id))}</dd><dt>Degree</dt><dd>${esc(pr.degree || "")}</dd></dl>
-        <div id="fields" class="col"></div><div id="st" hidden></div><div class="row" style="justify-content:flex-end"><button class="btn primary" id="next">Continue</button></div>`;
-      readProfile = await profileFields($("#fields"), pr, { tutor: true, parts: ["bio"] });
-      $("#next").onclick = async () => {
-        const v = readProfile();
-        if (!v.bio || v.bio.length < 20) return status($("#st"), "Write a short intro of at least 20 characters, like what you're good at explaining.", "err");
-        try { await saveProfile(v); A.step = A.path ? 3 : 2; render(); } catch (e) { status($("#st"), errMsg(e), "err"); }
-      };
-    }
-    function step2() {
-      $("#body").innerHTML = `<h2>Upload your transcript</h2>
-        <p class="muted" style="font-size:14px">Upload your official academic transcript or statement as a PDF or screenshot. Marks come straight from the document and can't be typed in or changed.</p>
-        <div class="ai-note"><span class="ai-spark" aria-hidden="true">✦</span><span><b>Our AI reads your transcript for you.</b> It scans the document and pulls out every course code and mark. This takes about 10 to 20 seconds, so keep this page open.</span></div>
-        <div class="ai-note privacy"><span class="ai-spark" aria-hidden="true">🔒</span><span><b>Your personal details are scrubbed.</b> The AI is set up to ignore your name, student number, address, date of birth and any other personal information. Your transcript file is deleted from our records as soon as it has been read. Only your courses and their marks are saved.</span></div>
-        <label class="drop" id="drop" for="tfile"><strong>${A.file ? esc(A.file.name) : "Drop your transcript here"}</strong><span class="muted" style="font-size:14px">PDF or image, up to 10 MB. Or click to choose a file.</span><input type="file" id="tfile" accept="${FILE_TYPES.join(",")}" hidden></label>
-        <div id="st" hidden></div>
-        <div id="tbl"></div>
-        <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="next">Continue</button></div>`;
-      const drop = $("#drop");
-      ["dragover", "dragenter"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
-      ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
-      drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) take(f); });
-      $("#tfile").onchange = e => { const f = e.target.files[0]; if (f) take(f); };
-      let busy = false;
-      async function take(f) {
-        if (busy) return;
-        if (!FILE_TYPES.includes(f.type)) return status($("#st"), "Upload a PDF or an image (PNG, JPG or WebP).", "err");
-        if (f.size > 10 * 1024 * 1024) return status($("#st"), "That file is over 10 MB.", "err");
-        busy = true; $("#next").disabled = true;
-        A.file = f; A.path = null; A.courses = []; A.scanned = false; drop.querySelector("strong").textContent = f.name; table();
-        status($("#st"), "Uploading your transcript…", "", true);
-        const path = `${S.user.id}/${Date.now()}-${f.name.replace(/[^\w.\-]+/g, "_").slice(-80)}`;
-        const up = await sb.storage.from("transcripts").upload(path, f, { contentType: f.type });
-        if (up.error) { A.file = null; busy = false; $("#next").disabled = false; return status($("#st"), errMsg(up.error), "err"); }
-        A.path = path;
-        status($("#st"), "");
-        const scan = scanAnimation($("#tbl"));
-        try {
-          const { data, error } = await sb.functions.invoke("scan-transcript", { body: { path } });
-          A.scanResult = data || null;
-          if (!error && data && Array.isArray(data.courses)) { A.courses = data.courses.sort((a, b) => b.mark - a.mark); A.scanned = true; }
-        } catch (e) { /* handled below */ }
-        await scan.finish(A.courses.length > 0);
-        busy = false; $("#next").disabled = false;
-        const n = A.courses.filter(c => c.mark >= 75).length;
-        A.duplicate = !!(A.scanResult && A.scanResult.duplicate);
-        if (A.duplicate) status($("#st"), "This transcript is already registered to another Distinction account, so it can't be used again. Each peer mentor must use their own transcript.", "err");
-        else if (!A.courses.length) status($("#st"), "The AI couldn't find any courses with marks in that file. Try a clearer PDF or a full-page screenshot of your transcript. Your file has already been deleted.", "err");
-        else if (!n) status($("#st"), `The AI found ${A.courses.length} courses, but none has a mark of 75 or more yet, so there's nothing to mentor. Your file has been deleted.`, "err");
-        else status($("#st"), `Done. Your file has been deleted. The AI found ${A.courses.length} courses, and ${n} ${n === 1 ? "has" : "have"} a mark of 75 or more, so you can mentor ${n === 1 ? "it" : "them"}.`, "ok");
-        table();
-      }
-      function table() {
-        if (!A.courses.length) { $("#tbl").innerHTML = ""; return; }
-        $("#tbl").innerHTML = `<p style="font-size:14px;margin:0"><b>What the AI read from your transcript</b></p><div class="table-wrap"><table><thead><tr><th>Code</th><th>Course</th><th>Mark</th><th>Grade</th><th></th></tr></thead><tbody>
-          ${A.courses.map(c => `<tr class="${c.mark >= 75 ? "" : "ineligible"}"><td class="mono">${esc(c.code)}</td><td>${esc(c.title)}</td><td class="num">${c.mark}</td><td><span class="badge ${gcls(c.grade || gradeFor(c.mark))}">${esc(c.grade || gradeFor(c.mark))}</span></td><td>${c.mark >= 75 ? '<span class="elig yes">Can mentor</span>' : '<span class="elig">Below 75</span>'}</td></tr>`).join("")}
-          </tbody></table></div>
-          <p class="muted" style="font-size:13px">Something missing or wrong? Upload a clearer copy and the AI will read it again.</p>`;
-      }
-      table();
-      $("#back").onclick = () => { A.step = 1; render(); };
-      $("#next").onclick = () => {
-        if (busy) return;
-        if (!A.path) return status($("#st"), "Upload your transcript first.", "err");
-        if (A.duplicate) return status($("#st"), "This transcript is already registered to another account, so it can't be used again.", "err");
-        if (!A.courses.some(c => c.mark >= 75)) return status($("#st"), "You need at least one course with a mark of 75 or more to mentor. Upload a different transcript if this one's wrong.", "err");
-        A.step = 3; render();
-      };
-    }
-    function step3() {
-      const rules = ["I'll explain concepts in my own words and won't complete assessable work for students.", "I won't share past assignments, exam answers or files. I'll only answer with text and markup on the student's document.", "The transcript I uploaded is my own, official and unedited. Using someone else's transcript gets my account removed."];
-      $("#body").innerHTML = `${FEATURES.equals ? `<h2>Verification</h2>
-        <p class="muted" style="font-size:14px">Add a My eQuals link to get a <b>✓ My eQuals</b> checkmark on your profile. My eQuals is the official digital transcript service used by Australian universities. It's optional: you can skip it now and add it later from your peer mentor profile.</p>
-        <div class="panel" style="background:var(--surface-2);gap:10px;padding:16px">
-          <b style="font-family:var(--display);font-size:17px">How to get your My eQuals link</b>
-          <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14px">
-            <li><b>Order an official transcript from your uni.</b> Most Australian universities issue transcripts through My eQuals. Graduates may already have one in their account. At UNSW, current students order a Standard Academic Transcript online for $20, and it's ready within 5 working days. Other unis vary, so check your uni's transcript page.</li>
-            <li><b>Open the email from My eQuals</b> when your transcript is ready, and create your account or sign in at <a href="https://www.myequals.edu.au/" target="_blank" rel="noopener noreferrer">myequals.edu.au</a>.</li>
-            <li><b>Open your academic transcript and choose Share.</b> Pick <b>Public link</b> (without a PIN) and set the expiry to at least 30 days, so our reviewer can open it.</li>
-            <li><b>Copy the link</b> and paste it below.</li>
-          </ol>
-          <small class="muted">Waiting on your My eQuals transcript? Skip this for now and add the link later from your peer mentor profile.</small>
-        </div>
-        <label class="field"><span>My eQuals share link (optional)</span><input type="url" id="eq" value="${esc(A.myequals)}" placeholder="https://www.myequals.edu.au/…"></label>` : `<h2>Peer mentor agreement</h2><p class="muted" style="font-size:14px">Tick each box to confirm you'll mentor fairly.</p><input type="hidden" id="eq" value="">`}
-        <div class="agree">${rules.map((r, i) => `<label class="check"><input type="checkbox" data-ag="${i}" ${A.agree[i] ? "checked" : ""}><span>${r}</span></label>`).join("")}</div>
-        <div id="st" hidden></div>
-        <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="next">Continue</button></div>`;
-      $("#body").onchange = e => { if (e.target.dataset.ag != null) A.agree[+e.target.dataset.ag] = e.target.checked; };
-      $("#back").onclick = () => { A.myequals = $("#eq").value.trim(); A.step = 2; render(); };
-      $("#next").onclick = () => {
-        A.myequals = $("#eq").value.trim();
-        if (A.myequals && !/^https:\/\/([\w-]+\.)*myequals\.(edu\.au|net|org)\//i.test(A.myequals)) return status($("#st"), "That doesn't look like a My eQuals link. It should start with https://www.myequals.edu.au/ or https://myequals.org/", "err");
-        if (A.agree.some(x => !x)) return status($("#st"), "Tick all three boxes to continue.", "err");
-        A.step = 4; render();
-      };
-    }
-    function step4() {
-      const good = A.courses.filter(c => c.mark >= 75);
-      $("#body").innerHTML = `<h2>Review and submit</h2>
-        <dl class="kv"><dt>Name</dt><dd>${esc(S.profile.full_name || "")} (${esc(S.profile.display_name || "")})</dd><dt>University</dt><dd>${esc(uniName(S.profile.uni_id))}</dd><dt>Degree</dt><dd>${esc(S.profile.degree || "")}</dd><dt>Transcript</dt><dd>Read by AI, then deleted</dd>${FEATURES.equals ? `<dt>My eQuals</dt><dd>${A.myequals ? "Link provided" : "Not yet. You can add it later for the checkmark."}</dd>` : ""}</dl>
-        ${good.length ? `<p style="font-size:14px"><b>You'll be approved to mentor these ${good.length} course${good.length === 1 ? "" : "s"} straight away</b></p><ul class="courses">${good.map(c => `<li><span class="code">${esc(c.code)}</span><span class="ttl">${esc(c.title)}</span><span class="grade">${c.mark}<span class="badge ${gcls(c.grade || gradeFor(c.mark))}">${esc(c.grade || gradeFor(c.mark))}</span></span></li>`).join("")}</ul>` : `<div class="status err">No courses with a mark of 75 or more. Go back and upload your transcript.</div>`}
-        <div id="st" hidden></div>
-        <div class="row" style="justify-content:space-between"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="go" ${good.length ? "" : "disabled"}>Submit and start mentoring</button></div>`;
-      $("#back").onclick = () => { A.step = 3; render(); };
-      $("#go").onclick = async () => {
-        $("#go").disabled = true; status($("#st"), "Submitting…", "", true);
-        const { data, error } = await sb.rpc("submit_tutor_application", { p_transcript_path: A.path, p_transcript_name: A.file.name, p_myequals: A.myequals });
-        if (error) { $("#go").disabled = false; return status($("#st"), errMsg(error), "err"); }
-        await loadProfile(); renderHeader();
-        if (!data) { toast("Application rejected"); go("/tutor"); return; }
-        track("tutor_approved", { courses: good.length });
-        toast("You're approved. Welcome aboard!"); go("/tutor");
-      };
-    }
-    function render() { paintSteps(); ({ 1: step1, 2: step2, 3: step3, 4: step4 })[A.step](); window.scrollTo(0, 0); }
-    // Resume: reuse the most recent scanned transcript so peer mentors can come back once their My eQuals link arrives
-    const { data: last } = await sb.from("transcript_scans").select("path, courses, created_at").eq("user_id", S.user.id).order("created_at", { ascending: false }).limit(1);
-    if (last && last[0] && Date.now() - new Date(last[0].created_at) < 60 * 864e5) {
-      A.path = last[0].path; A.courses = (last[0].courses || []).sort((a, b) => b.mark - a.mark);
-      A.file = { name: last[0].path.split("/").pop().replace(/^\d+-/, "") };
-    }
-    render();
-  }
-
-  async function pdfText(file) {
-    const doc = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
-    let out = "";
-    for (let n = 1; n <= Math.min(doc.numPages, 10); n++) {
-      const page = await doc.getPage(n); const tc = await page.getTextContent();
-      // rebuild rows: group text pieces by vertical position, then read left to right
-      const rows = [];
-      for (const it of tc.items) {
-        if (!it.str || !it.str.trim()) continue;
-        const y = it.transform[5], x = it.transform[4];
-        let row = rows.find(r => Math.abs(r.y - y) < 3);
-        if (!row) rows.push(row = { y, items: [] });
-        row.items.push({ x, s: it.str });
-      }
-      rows.sort((a, b) => b.y - a.y);
-      out += rows.map(r => r.items.sort((a, b) => a.x - b.x).map(i => i.s).join(" ")).join("\n") + "\n";
-    }
-    return out.replace(/\b([A-Z]{4})\s(\d{4})\b/g, "$1$2");
-  }
-  function parseTranscript(text) {
-    const out = [], seen = new Set();
-    const codeRe = /\b([A-Z]{2,5}\d{3,5}[A-Z]?|[A-Z]{3}\d[A-Z]{2,3}|\d{5,6})\b/;
-    for (const raw of text.split(/\n/)) {
-      const line = raw.replace(/\s+/g, " ").trim(); const m = line.match(codeRe); if (!m) continue;
-      const code = m[1]; if (seen.has(code) || /^(19|20)\d\d$/.test(code)) continue;
-      const after = line.slice(line.indexOf(code) + code.length);
-      const gradeM = after.match(/\b(HD|DN|DI|D|CR|C|PS|P|FL|F|N|H1|H2A|H2B|H3)\b(?!.*\b(HD|DN|DI|CR|PS|FL)\b)/);
-      const nums = [...after.matchAll(/(?<![\d.])(\d{1,3})(?:\.\d+)?(?![\d.])/g)].map(x => +x[1]).filter(n => n <= 100);
-      const mark = nums.length ? nums[nums.length - 1] : null;
-      if (mark == null) continue;
-      const title = after.replace(/\b20\d\d\b.*$/, "").replace(/\b(T|S|Term|Sem(ester)?)\s?[0-3]\b.*$/i, "").replace(/\d.*$/, "").trim().slice(0, 80);
-      seen.add(code);
-      out.push({ code, title, mark, grade: gradeM ? gradeM[1] : gradeFor(mark) });
-    }
-    return out.sort((a, b) => b.mark - a.mark);
   }
 
   /* ---------------- admin ---------------- */
   async function pageAdmin() {
     if (!S.profile.is_admin) { app().innerHTML = `<div class="empty">Admins only.</div>`; return; }
-    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">Admin</h1><div class="seg" style="min-width:360px"><label><input type="radio" name="ad" value="qs" checked><span>Questions</span></label><label><input type="radio" name="ad" value="apps"><span>Applications</span></label>${FEATURES.equals ? '<label><input type="radio" name="ad" value="equals"><span>My eQuals</span></label>' : ""}<label><input type="radio" name="ad" value="reports"><span>Reports</span></label><label><input type="radio" name="ad" value="ai"><span>AI flags</span></label><label><input type="radio" name="ad" value="pay"><span>Payouts</span></label><label><input type="radio" name="ad" value="credits"><span>Credits</span></label></div></div><div id="ad-body"></div></section>`;
-    document.querySelectorAll('input[name="ad"]').forEach(r => r.onchange = () => r.value === "qs" ? adminQuestions() : r.value === "apps" ? adminApps() : r.value === "equals" ? adminEquals() : r.value === "ai" ? adminAI() : r.value === "pay" ? adminPayouts() : r.value === "credits" ? adminCredits() : adminReports());
-    adminQuestions();
+    app().innerHTML = `<section class="view"><div class="results-head"><h1 style="font-size:30px">Admin</h1><div class="seg" style="min-width:320px"><label><input type="radio" name="ad" value="open" checked><span>Reports</span></label><label><input type="radio" name="ad" value="done"><span>Resolved</span></label><label><input type="radio" name="ad" value="pay"><span>Old payouts</span></label></div></div><div id="ad-body" class="col"></div></section>`;
+    document.querySelectorAll('input[name="ad"]').forEach(r => r.onchange = () => r.value === "pay" ? adminPayouts() : adminReports(r.value === "done"));
+    adminReports(false);
   }
-  async function adminApps(selected) {
+  async function adminReports(resolved) {
     const body = $("#ad-body");
-    const { data: apps, error } = await sb.from("tutor_applications").select("*, applicant:profiles!tutor_applications_user_id_fkey(full_name, display_name, uni_id, degree, year_of_study)").eq("status", "pending").order("submitted_at");
+    body.innerHTML = `<div class="boot">Loading…</div>`;
+    const { data, error } = await sb.from("forum_reports").select("*, post:forum_posts(id,title,body,removed,author_name), reply:forum_replies(id,body,removed,post_id,author_name)").eq("resolved", resolved).order("created_at", { ascending: false }).limit(100);
     if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
-    if (!apps.length) { body.innerHTML = `<div class="empty">No applications waiting for review.</div>`; return; }
-    const cur = apps.find(a => a.id === selected) || apps[0];
-    body.innerHTML = `<div class="admin-grid"><div class="col"><div id="ad-doc"></div></div><div class="col">
-      <div class="app-list">${apps.map(a => `<button class="app-item" data-app="${a.id}" aria-current="${a.id === cur.id}"><span><b>${esc(a.applicant ? a.applicant.full_name : "Unknown")}</b><br><span class="muted" style="font-size:13px">${esc(uniShort(a.applicant && a.applicant.uni_id))} · ${ago(a.submitted_at)}</span></span><span class="status-pill pending">Pending</span></button>`).join("")}</div>
-      <div class="panel" id="ad-form"></div></div></div>`;
-    body.querySelectorAll("[data-app]").forEach(b => b.onclick = () => adminApps(b.dataset.app));
-    const { data: tcs } = await sb.from("tutor_courses").select("*").eq("application_id", cur.id).order("mark", { ascending: false });
-    const a = cur.applicant || {};
-    $("#ad-form").innerHTML = `<h2 style="font-size:20px">${esc(a.full_name || "")}</h2>
-      <dl class="kv"><dt>Display name</dt><dd>${esc(a.display_name || "")}</dd><dt>University</dt><dd>${esc(uniName(a.uni_id))}</dd><dt>Degree</dt><dd>${esc(a.degree || "")} · ${esc(a.year_of_study || "")}</dd><dt>My eQuals</dt><dd>${cur.myequals_link ? `<a href="${esc(cur.myequals_link)}" target="_blank" rel="noopener noreferrer">Open share link ↗</a>` : "Not provided"}</dd></dl>
-      <p class="muted" style="font-size:13px">Tick the courses that match the transcript.</p>
-      <div class="table-wrap"><table><thead><tr><th></th><th>Code</th><th>Course</th><th>Mark</th><th>Grade</th></tr></thead><tbody>
-      ${(tcs || []).map(c => `<tr><td><input type="checkbox" data-c="${c.id}" checked aria-label="Approve ${esc(c.code)}"></td><td class="mono">${esc(c.code)}</td><td>${esc(c.title)}</td><td class="num">${c.mark}</td><td>${esc(c.grade || "")}</td></tr>`).join("")}</tbody></table></div>
-      <details><summary style="cursor:pointer;font-size:14px;font-weight:500">Add a course the scan missed</summary><div class="row" style="margin-top:8px"><input type="text" id="ad-code" placeholder="Code" style="width:110px;font-family:var(--mono);text-transform:uppercase"><input type="text" id="ad-title" placeholder="Course name" style="flex:1;min-width:140px"><input type="number" id="ad-mark" placeholder="Mark" min="75" max="100" style="width:80px"><input type="text" id="ad-grade" placeholder="Grade" style="width:70px"><button class="btn sm" id="ad-add">Add</button></div></details>
-      ${cur.myequals_link ? '<label class="check"><input type="checkbox" id="ad-eq"> I opened the My eQuals link and it matches. Give the ✓ My eQuals checkmark.</label>' : '<input type="checkbox" id="ad-eq" hidden>'}
-      <label class="field"><span>Note to applicant (shown if rejected)</span><textarea class="prose" id="ad-notes" style="min-height:60px" maxlength="500"></textarea></label>
-      <div id="st" hidden></div>
-      <div class="row" style="justify-content:space-between"><button class="btn" id="ad-reject">Reject</button><button class="btn primary" id="ad-approve">Approve ticked courses</button></div>`;
-    try {
-      const url = await signedUrl("transcripts", cur.transcript_path);
-      const type = /\.pdf$/i.test(cur.transcript_path) ? "application/pdf" : "image/png";
-      await DocView.mount($("#ad-doc"), { url, type, editable: false });
-    } catch (e) { $("#ad-doc").innerHTML = `<div class="status">The transcript file was deleted after the AI read it. The courses and marks below are what it found.</div>`; }
-    const decide = async approve => {
-      const ids = $$("#ad-form [data-c]").filter(x => x.checked).map(x => +x.dataset.c);
-      if (approve && !ids.length) return status($("#st"), "Tick at least one course, or reject the application.", "err");
-      const { error } = await sb.rpc("admin_review_application", { p_app: cur.id, p_approve: approve, p_equals: $("#ad-eq").checked, p_course_ids: ids, p_notes: $("#ad-notes").value.trim() || null });
-      if (error) return status($("#st"), errMsg(error), "err");
-      toast(approve ? "Approved" : "Rejected"); adminApps();
-    };
-    $("#ad-add").onclick = async () => {
-      const { error } = await sb.rpc("admin_add_course", { p_app: cur.id, p_code: $("#ad-code").value.trim(), p_title: $("#ad-title").value.trim(), p_mark: +$("#ad-mark").value, p_grade: $("#ad-grade").value.trim() });
-      if (error) return status($("#st"), errMsg(error), "err");
-      toast("Course added"); adminApps(cur.id);
-    };
-    $("#ad-approve").onclick = () => decide(true);
-    $("#ad-reject").onclick = () => decide(false);
-  }
-  async function adminEquals() {
-    const body = $("#ad-body");
-    const { data, error } = await sb.from("profiles").select("id, full_name, display_name, uni_id, myequals_link, equals_verified").not("myequals_link", "is", null).neq("tutor_status", "none").order("equals_verified");
-    if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
-    body.innerHTML = data.length ? `<div class="col">${data.map(t => `<div class="answer-card"><div class="row" style="justify-content:space-between"><span><b>${esc(t.full_name || "")}</b> <span class="muted">${esc(uniShort(t.uni_id))}</span></span><span class="status-pill ${t.equals_verified ? "approved" : "pending"}">${t.equals_verified ? "Verified" : "To check"}</span></div>
-      <a href="${esc(t.myequals_link)}" target="_blank" rel="noopener noreferrer">Open My eQuals link ↗</a>
-      <div class="row" style="justify-content:flex-end">${t.equals_verified ? `<button class="btn sm" data-eqv="${t.id}:0">Remove checkmark</button>` : `<button class="btn primary sm" data-eqv="${t.id}:1">Matches: give checkmark</button>`}</div></div>`).join("")}</div>` : `<div class="empty">No My eQuals links to check.</div>`;
+    const label = v => (REPORT_REASONS.find(r => r[0] === v) || [, v])[1];
+    body.innerHTML = data.length ? data.map(r => {
+      const item = r.post || r.reply, kind = r.post ? "post" : "reply", link = r.post ? `/p/${r.post.id}` : r.reply ? `/p/${r.reply.post_id}#r-${r.reply.id}` : "";
+      return `<div class="panel" style="gap:10px"><div class="row" style="justify-content:space-between"><b>${esc(label(r.reason))}</b><span class="muted" style="font-size:12px">${ago(r.created_at)}</span></div>
+        ${r.note ? `<p class="muted" style="font-size:14px">“${esc(r.note)}”</p>` : ""}
+        ${item ? `<div class="reply"><b>${kind === "post" ? esc(r.post.title) : "Answer"}</b> <span class="muted" style="font-size:13px">by ${esc(item.author_name || "Student")}</span>${item.removed ? ' <span class="status-pill rejected">Removed</span>' : ""}<div class="post-body">${esc(snippet(item.body, 500))}</div></div>` : `<p class="muted">The content was deleted.</p>`}
+        <div class="row" style="justify-content:flex-end">${link ? `<a class="btn sm ghost" href="${link}">Open</a>` : ""}${item && !item.removed ? `<button class="btn sm" data-rm="${kind}:${item.id}:${r.id}">Remove and resolve</button>` : ""}${resolved ? "" : `<button class="btn sm primary" data-ok="${r.id}">Dismiss</button>`}</div></div>`;
+    }).join("") : `<div class="empty">${resolved ? "No resolved reports." : "No reports to review."}</div>`;
     body.onclick = async e => {
-      const b = e.target.closest("[data-eqv]"); if (!b) return;
-      const [uid, v] = b.dataset.eqv.split(":");
-      const { error } = await sb.rpc("admin_set_equals", { p_user: uid, p_verified: v === "1" });
-      if (error) return toast(errMsg(error)); toast(v === "1" ? "Checkmark given" : "Checkmark removed"); adminEquals();
+      const rm = e.target.closest("[data-rm]"), ok = e.target.closest("[data-ok]");
+      if (rm) {
+        const [kind, id, rid] = rm.dataset.rm.split(":");
+        const { error } = await sb.from(kind === "post" ? "forum_posts" : "forum_replies").update({ removed: true }).eq("id", id);
+        if (error) return toast(errMsg(error));
+        await sb.from("forum_reports").update({ resolved: true }).eq(kind === "post" ? "post_id" : "reply_id", id);
+        toast("Removed"); adminReports(resolved);
+      }
+      if (ok) {
+        const { error } = await sb.from("forum_reports").update({ resolved: true }).eq("id", ok.dataset.ok);
+        if (error) return toast(errMsg(error));
+        toast("Dismissed"); adminReports(resolved);
+      }
     };
   }
-  async function adminReports() {
-    const body = $("#ad-body");
-    const { data, error } = await sb.from("reports").select("*, answer:answers(bubbles, tutor_id, question_id, created_at)").order("created_at", { ascending: false }).limit(50);
-    if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
-    body.innerHTML = data.length ? `<div class="col">${data.map(r => `<div class="answer-card"><div class="row" style="justify-content:space-between"><b>Report</b><span class="muted" style="font-size:12px">${ago(r.created_at)}</span></div><p>${esc(r.reason || "")}</p><div class="bubbles">${((r.answer && r.answer.bubbles) || []).map(b => `<div class="bubble">${esc(b)}</div>`).join("")}</div></div>`).join("")}</div>` : `<div class="empty">No reports.</div>`;
-  }
-
-  /* Every question on the site */
-  async function adminQuestions() {
-    const body = $("#ad-body");
-    body.innerHTML = `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
-        <div class="seg" style="min-width:260px"><label><input type="radio" name="aq" value="open" checked><span>Open</span></label><label><input type="radio" name="aq" value="all"><span>All</span></label><label><input type="radio" name="aq" value="none"><span>No answers yet</span></label></div>
-        <input type="search" id="aq-q" placeholder="Filter by course code or text" style="flex:1;min-width:180px">
-        ${refreshBtn("aq-ref")}</div>
-      <p class="muted" id="aq-sum" style="font-size:13px;margin:0"></p>
-      <div class="qgrid" id="aq-list"><div class="boot">Loading…</div></div>`;
-    let rows = [];
-    async function load() {
-      const { data, error } = await sb.from("questions").select("id, asker_id, uni_id, course_code, body, slots, urgent, min_mark, goals, reach_level, reach_count, expires_at, created_at, cost, attachment_name, asker:profiles!questions_asker_id_fkey(full_name, display_name), answers(id, position, bubbles, tutor_id)").order("created_at", { ascending: false }).limit(300);
-      if (error) { $("#aq-list").innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
-      rows = data || [];
-      const ids = [...new Set(rows.flatMap(q => (q.answers || []).map(a => a.tutor_id)))];
-      if (ids.length) { const { data: ts } = await sb.from("profiles").select("id, display_name, full_name").in("id", ids); (ts || []).forEach(t => S.names[t.id] = displayName(t)); }
-      paint();
-    }
-    function paint() {
-      const mode = document.querySelector('input[name="aq"]:checked').value, f = $("#aq-q").value.trim().toUpperCase(), now = Date.now();
-      const list = rows.filter(q => {
-        const open = new Date(q.expires_at) > now, n = (q.answers || []).length;
-        if (mode === "open" && !open) return false;
-        if (mode === "none" && n > 0) return false;
-        return !f || (q.course_code + " " + q.body + " " + q.uni_id).toUpperCase().includes(f);
-      });
-      const open = rows.filter(q => new Date(q.expires_at) > now).length, unanswered = rows.filter(q => !(q.answers || []).length && new Date(q.expires_at) > now).length;
-      $("#aq-sum").textContent = `${rows.length} questions loaded · ${open} open · ${unanswered} open with no answers yet`;
-      $("#aq-list").innerHTML = list.length ? list.map(q => {
-        const n = (q.answers || []).length, closed = new Date(q.expires_at) < now, who = q.asker ? (q.asker.full_name || q.asker.display_name) : "Student";
-        const canAnswer = !closed && n < q.slots && q.asker_id !== S.user.id && !(q.answers || []).some(a => a.tutor_id === S.user.id);
-        return `<article class="q${closed ? " closed" : ""}">
-          <div class="q-top"><span class="row" style="gap:6px"><span class="q-code">${esc(q.course_code)}</span><span class="q-time">${esc(uniShort(q.uni_id))} · ${ago(q.created_at)} · <span data-notr>${esc(who)}</span></span></span><span class="q-exp${closed ? "" : " live"}">${left(q.expires_at)}</span></div>
-          <p class="q-text">${esc(q.body)}</p>
-          <div class="q-pay"><span class="slotbar">${Array.from({ length: q.slots }, (_, i) => `<i class="${i < n ? "on" : ""}"></i>`).join("")}</span><span>${n} of ${q.slots} answers</span>${q.urgent ? '<span class="tagchip">Urgent</span>' : ""}${q.reach_level ? '<span class="tagchip">Widened</span>' : ""}<span class="tagchip">Reach ${q.reach_count ?? "?"}</span><span class="tagchip">${money(Number(q.cost || 0))}</span>${q.attachment_name ? '<span class="tagchip">Attachment</span>' : ""}</div>
-          ${n ? `<div class="ans-preview">${(q.answers || []).sort((a, b) => a.position - b.position).map(a => `<div class="ap"><b data-notr>${esc(S.names[a.tutor_id] || "Peer mentor")}</b><span>${esc((a.bubbles || []).join(" ").slice(0, 140))}</span></div>`).join("")}</div>` : ""}
-          <div class="row" style="justify-content:flex-end;gap:8px"><a class="btn ghost sm" href="/q/${q.id}">View</a>${canAnswer ? `<a class="btn primary sm" href="/answer/${q.id}">Answer · 2 min</a>` : ""}</div>
-        </article>`;
-      }).join("") : `<div class="empty">No questions match.</div>`;
-    }
-    body.querySelectorAll('input[name="aq"]').forEach(r => r.onchange = paint);
-    $("#aq-q").oninput = paint;
-    wireRefresh("aq-ref", load);
-    await load();
-    every(20000, load);
-  }
-
-  /* Give (or take back) credits on any account */
-  async function adminCredits() {
-    const body = $("#ad-body");
-    body.innerHTML = `<div class="panel" style="max-width:520px;gap:12px">
-      <h3 style="font-size:18px">Add credits to an account</h3>
-      <p class="muted" style="font-size:14px">Credits go straight onto the account and show in their history with your reason. Use a minus amount to take credits back.</p>
-      <label class="field"><span>Account email</span><input type="email" id="gc-email" placeholder="student@example.com" autocomplete="off"></label>
-      <label class="field"><span>Credits ($)</span><input type="number" id="gc-amt" step="0.5" min="-1000" max="1000" value="10"></label>
-      <label class="field"><span>Reason (shown to them)</span><input type="text" id="gc-label" maxlength="80" value="Credits added by Distinction"></label>
-      <div id="gc-st" hidden></div>
-      <div class="row" style="justify-content:flex-end"><button class="btn primary" id="gc-go">Add credits</button></div></div>
-      <div class="panel" style="gap:6px"><div class="eyebrow">Recently added by admins</div><ul class="list" id="gc-recent"><li class="muted">Loading…</li></ul></div>`;
-    const recent = async () => {
-      const { data } = await sb.from("credit_tx").select("amount, label, created_at, user:profiles!credit_tx_user_id_fkey(full_name, display_name)").is("question_id", null).not("label", "ilike", "Top-up%").not("label", "ilike", "Test top-up%").order("created_at", { ascending: false }).limit(15);
-      $("#gc-recent").innerHTML = (data || []).map(t => `<li><span>${esc(t.user ? t.user.full_name || t.user.display_name : "")} · ${esc(t.label)} <span class="muted" style="font-size:12px">${ago(t.created_at)}</span></span><span class="amt ${t.amount > 0 ? "pos" : ""}">${t.amount > 0 ? "+" : ""}${money(Number(t.amount))}</span></li>`).join("") || '<li class="muted">None yet.</li>';
-    };
-    $("#gc-go").onclick = async () => {
-      const email = $("#gc-email").value.trim(), amt = Number($("#gc-amt").value), label = $("#gc-label").value.trim();
-      if (!email) return status($("#gc-st"), "Enter the account's email.", "err");
-      if (!amt) return status($("#gc-st"), "Enter an amount.", "err");
-      $("#gc-go").disabled = true;
-      const { data, error } = await sb.rpc("admin_grant_credits", { p_email: email, p_amount: amt, p_label: label });
-      $("#gc-go").disabled = false;
-      if (error) return status($("#gc-st"), errMsg(error), "err");
-      status($("#gc-st"), `Done. ${email} now has ${money(Number(data))} in credits.`, "ok");
-      if (S.user.email.toLowerCase() === email.toLowerCase()) refreshCredits();
-      recent();
-    };
-    recent();
-  }
-
   async function adminPayouts() {
     const body = $("#ad-body");
     const { data, error } = await sb.from("payout_requests").select("*, tutor:profiles!payout_requests_tutor_id_fkey(full_name, display_name, uni_id)").order("status").order("created_at", { ascending: false }).limit(100);
     if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
     const pend = data.filter(r => r.status === "pending");
     body.innerHTML = `<p class="muted" style="font-size:14px">${pend.length ? `${pend.length} to pay · ${money(pend.reduce((a, r) => a + Number(r.amount), 0))} total. Pay each one by PayID from your banking app, check the name matches, then mark it paid.` : "Nothing to pay right now."}</p>` +
-      (data.length ? `<div class="col">${data.map(r => `<div class="answer-card"><div class="row" style="justify-content:space-between"><span><b>${esc(r.tutor ? r.tutor.full_name || r.tutor.display_name : "Peer mentor")}</b> <span class="muted">${esc(uniShort(r.tutor && r.tutor.uni_id))} · ${ago(r.created_at)}</span></span><span class="status-pill ${r.status === "paid" ? "approved" : r.status === "rejected" ? "rejected" : "pending"}">${r.status === "pending" ? "To pay" : r.status === "paid" ? "Paid" : "Rejected"}</span></div>
+      (data.length ? `<div class="col">${data.map(r => `<div class="answer-card"><div class="row" style="justify-content:space-between"><span><b>${esc(r.tutor ? r.tutor.full_name || r.tutor.display_name : "Student")}</b> <span class="muted">${esc(uniShort(r.tutor && r.tutor.uni_id))} · ${ago(r.created_at)}</span></span><span class="status-pill ${r.status === "paid" ? "approved" : r.status === "rejected" ? "rejected" : "pending"}">${r.status === "pending" ? "To pay" : r.status === "paid" ? "Paid" : "Rejected"}</span></div>
         <dl class="kv"><dt>Amount</dt><dd><b>${money(Number(r.amount))}</b></dd><dt>PayID</dt><dd>${esc(r.payid)}</dd><dt>Name</dt><dd>${esc(r.payid_name)}</dd><dt>Reference</dt><dd>Distinction ${esc(r.id.slice(0, 8))}</dd></dl>
         ${r.status === "pending" ? `<div class="row" style="justify-content:flex-end"><button class="btn sm" data-pay="${r.id}:0">Reject</button><button class="btn primary sm" data-pay="${r.id}:1">Mark as paid</button></div>` : ""}</div>`).join("")}</div>` : "");
     body.onclick = async e => {
@@ -1615,25 +795,10 @@
         closeModal(); toast(paid === "1" ? "Marked as paid" : "Request rejected. The amount is back in their balance."); adminPayouts();
       };
       if (paid === "1") return openModal(`<h3>Mark as paid?</h3><p class="muted" style="font-size:14px">Only do this once the PayID transfer has gone through.</p><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="pm-go">Mark as paid</button></div>`, m => { $("#pm-go", m).onclick = () => go(null); });
-      openModal(`<h3>Reject this withdrawal?</h3><label class="field"><span>Reason (shown to the peer mentor)</span><textarea class="prose" id="pm-note" maxlength="300" style="min-height:70px" placeholder="For example: the PayID name didn't match"></textarea></label><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="pm-go">Reject</button></div>`, m => { $("#pm-go", m).onclick = () => go($("#pm-note", m).value.trim() || null); });
+      openModal(`<h3>Reject this withdrawal?</h3><label class="field"><span>Reason (shown to them)</span><textarea class="prose" id="pm-note" maxlength="300" style="min-height:70px" placeholder="For example: the PayID name didn't match"></textarea></label><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="pm-go">Reject</button></div>`, m => { $("#pm-go", m).onclick = () => go($("#pm-note", m).value.trim() || null); });
     };
   }
 
-  async function adminAI() {
-    const body = $("#ad-body");
-    const { data, error } = await sb.from("answer_checks").select("ai_score, typed_ratio, reason, created_at, answer:answers(bubbles, question_id), tutor:profiles!answer_checks_tutor_id_fkey(id, full_name, display_name, ai_flags, uni_id, tutor_paused)").eq("flagged", true).order("created_at", { ascending: false }).limit(50);
-    if (error) { body.innerHTML = `<div class="status err">${esc(errMsg(error))}</div>`; return; }
-    body.innerHTML = data.length ? `<div class="col">${data.map(c => `<div class="answer-card"><div class="row" style="justify-content:space-between"><span><b>${esc(c.tutor ? c.tutor.full_name || c.tutor.display_name : "Peer mentor")}</b> <span class="muted">${esc(uniShort(c.tutor && c.tutor.uni_id))} · ${c.tutor ? c.tutor.ai_flags : 0} flag${c.tutor && c.tutor.ai_flags === 1 ? "" : "s"} in total</span></span><span class="row" style="gap:6px">${c.tutor && c.tutor.tutor_paused ? `<span class="status-pill pending">Paused</span><button class="btn sm" data-unpause="${c.tutor.id}">Lift pause</button>` : ""}<span class="status-pill rejected">${c.ai_score}% AI</span></span></div>
-      <p class="muted" style="font-size:13px">${esc(c.reason || "")}${c.typed_ratio != null ? ` · ${Math.round(c.typed_ratio * 100)}% typed` : ""} · ${ago(c.created_at)}</p>
-      <div class="bubbles">${((c.answer && c.answer.bubbles) || []).map(b => `<div class="bubble">${esc(b)}</div>`).join("")}</div></div>`).join("")}</div>` : `<div class="empty">No answers flagged for AI writing.</div>`;
-    body.onclick = async e => {
-      const b = e.target.closest("[data-unpause]"); if (!b) return;
-      b.disabled = true;
-      const { error } = await sb.rpc("admin_unpause_tutor", { p_user: b.dataset.unpause });
-      if (error) { toast(errMsg(error)); b.disabled = false; return; }
-      toast("Pause lifted. Earlier flags no longer count."); adminAI();
-    };
-  }
 
   /* ---------------- boot ---------------- */
   async function boot() {
